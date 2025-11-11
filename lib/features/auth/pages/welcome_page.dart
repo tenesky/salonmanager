@@ -64,8 +64,9 @@ class WelcomePage extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     onPressed: () {
-                      // TODO: Navigate to registration when implemented.
-                      Navigator.of(context).pushNamed('/login');
+                      // Navigate to customer registration by default. Salon‑Owner registration
+                      // can be accessed from within the registration screen.
+                      Navigator.of(context).pushNamed('/register-customer');
                     },
                     child: const Text('Registrieren'),
                   ),

@@ -110,6 +110,14 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                // Link to password reset
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pushNamed('/forgot-password');
+                  },
+                  child: const Text('Passwort vergessen?'),
+                ),
+                const SizedBox(height: 12),
                 Text(
                   'Zwei-Faktor-Authentifizierung wird nach dem Login benötigt.',
                   style: TextStyle(color: primary.withOpacity(0.7)),

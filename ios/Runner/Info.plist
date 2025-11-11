@@ -47,5 +47,14 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Wir benötigen Zugriff auf deine Fotomediathek, um Bilder oder Dokumente auszuwählen und zu teilen.</string>
+	<!-- Purpose strings required by iOS when accessing sensitive user data -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Wir benötigen Ihren Standort, um Ihnen Salons in Ihrer Nähe anzuzeigen.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Wir benötigen Ihren Standort, um Ihnen Salons in Ihrer Nähe anzuzeigen.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Wir benötigen Zugriff auf die Kamera, um Fotos für Buchungen hochzuladen.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Wir benötigen Zugriff auf die Fotomediathek, um Bilder für Buchungen hochzuladen.</string>
 </dict>
 </plist>
