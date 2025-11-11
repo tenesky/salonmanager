@@ -13,6 +13,9 @@ import 'features/auth/pages/reset_password_page.dart';
 import 'features/home/pages/home_page.dart';
 import 'features/salon/pages/salon_list_page.dart';
 
+// Import theme
+import 'core/theme.dart';
+
 /// The root widget of the application. This sets up a basic
 /// [MaterialApp] with placeholder theming and a placeholder home
 /// widget.  Detailed routing, theming and state management will be
@@ -24,13 +27,11 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'SalonManager',
-      // Provide light and dark themes; actual colors are defined in core/theme.dart.
-      theme: ThemeData(
-        brightness: Brightness.light,
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-      ),
+      // Use the predefined light and dark themes from core/theme.dart. These define
+      // primary and secondary colors (black and gold) and ensure consistent
+      // styling across the app.
+      theme: lightTheme,
+      darkTheme: darkTheme,
       // Define the initial route and route table.
       initialRoute: '/',
       routes: {
@@ -43,6 +44,10 @@ class MyApp extends StatelessWidget {
         '/reset-password': (context) => const ResetPasswordPage(),
         '/home': (context) => const HomePage(),
         '/salon-list': (context) => const SalonListPage(),
+        // Route used for demo login. Without a backend this simply opens the
+        // Home page to allow testing of navigation and UI flows without
+        // authentication.
+        '/demo': (context) => const HomePage(),
       },
     );
   }

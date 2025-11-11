@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../common/themed_background.dart';
 
 /// Home page for customers. This screen shows a simple search field,
 /// a placeholder map section and a few recommended salons. It serves
@@ -15,78 +16,80 @@ class HomePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Home'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Search field
-            TextField(
-              decoration: InputDecoration(
-                hintText: 'Salons suchen...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8.0),
+      body: ThemedBackground(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Search field
+              TextField(
+                decoration: InputDecoration(
+                  hintText: 'Salons suchen...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            // Map placeholder
-            Container(
-              height: 200,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceVariant,
-                borderRadius: BorderRadius.circular(12.0),
-              ),
-              child: Center(
-                child: Text(
-                  'Kartenansicht (Placeholder)',
-                  style: theme.textTheme.bodyMedium,
+              const SizedBox(height: 16),
+              // Map placeholder
+              Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceVariant,
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+                child: Center(
+                  child: Text(
+                    'Kartenansicht (Placeholder)',
+                    style: theme.textTheme.bodyMedium,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Empfohlene Salons',
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            // List of recommended salons (static sample data)
-            Column(
-              children: [
-                _SalonCard(
-                  name: 'Salon Elegance',
-                  distance: '1,2 km',
-                  rating: 4.8,
-                  priceLevel: '\$\$',
-                ),
-                const SizedBox(height: 12),
-                _SalonCard(
-                  name: 'Hair Couture',
-                  distance: '2,5 km',
-                  rating: 4.6,
-                  priceLevel: '\$\$\$',
-                ),
-                const SizedBox(height: 12),
-                _SalonCard(
-                  name: 'Golden Scissors',
-                  distance: '3,0 km',
-                  rating: 4.7,
-                  priceLevel: '\$\$',
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () {
-                  Navigator.of(context).pushNamed('/salon-list');
-                },
-                child: const Text('Alle Salons anzeigen'),
+              const SizedBox(height: 24),
+              Text(
+                'Empfohlene Salons',
+                style: theme.textTheme.titleMedium,
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              // List of recommended salons (static sample data)
+              Column(
+                children: [
+                  _SalonCard(
+                    name: 'Salon Elegance',
+                    distance: '1,2 km',
+                    rating: 4.8,
+                    priceLevel: '\$\$',
+                  ),
+                  const SizedBox(height: 12),
+                  _SalonCard(
+                    name: 'Hair Couture',
+                    distance: '2,5 km',
+                    rating: 4.6,
+                    priceLevel: '\$\$\$',
+                  ),
+                    const SizedBox(height: 12),
+                    _SalonCard(
+                    name: 'Golden Scissors',
+                    distance: '3,0 km',
+                    rating: 4.7,
+                    priceLevel: '\$\$',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.of(context).pushNamed('/salon-list');
+                  },
+                  child: const Text('Alle Salons anzeigen'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
