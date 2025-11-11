@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:salonmanager/services/db_service.dart';
+import 'package:intl/intl.dart';
 
 /// Represents a booking in the daily calendar.
 ///
@@ -41,62 +43,140 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
   final int slotCount = 24; // 12 hours × 2 = 24 slots of 30 minutes
   final double slotHeight = 60.0;
 
-  // Sample stylists. In a real app these would be loaded from the backend.
-  final List<String> stylists = ['Anna', 'Ben', 'Caro'];
+  /// Selected date for which bookings are displayed. Defaults to today.
+  DateTime _selectedDate = DateTime.now();
 
-  // Unique colour per stylist. Colours are drawn from the theme’s palette to
-  // emphasise different staff members without hardcoding specific hues.
-  late final List<Color> stylistColors;
+  /// Stylists loaded from the database. Each map contains id, name and color.
+  List<Map<String, dynamic>> _stylists = [];
 
-  // Keys to determine the position of each column for drag calculations.
-  late final List<GlobalKey> columnKeys;
+  /// Services loaded from the database. Each map contains id, name, price and duration.
+  List<Map<String, dynamic>> _services = [];
 
-  // List of bookings displayed in the calendar. Each booking knows its
-  // stylist index, start time and duration.
-  late List<Booking> bookings;
+  /// Colours used to represent stylists in the calendar. Populated based on
+  /// stylist colour codes from the database or fallback palette.
+  List<Color> stylistColors = [];
+
+  /// Keys to determine the position of each column for drag calculations.
+  List<GlobalKey> columnKeys = [];
+
+  /// List of bookings displayed in the calendar. Each booking knows its
+  /// stylist index, start time and duration.
+  List<Booking> bookings = [];
+
+  /// Indicates whether data is currently being loaded.
+  bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialize stylist colours using the theme’s colorScheme. We cycle
-    // through primary and secondary with different opacity to distinguish
-    // stylists.
-    stylistColors = [
-      Colors.amber.shade700,
-      Colors.blue.shade600,
-      Colors.green.shade600,
-    ];
-    // Create global keys for each column so we can translate global drop
-    // coordinates to local offsets when a booking is dropped.
-    columnKeys = List.generate(stylists.length, (_) => GlobalKey());
-    // Sample bookings for demonstration. In production these would come
-    // from the backend and be filtered by the selected day.
-    bookings = [
-      Booking(
-        id: '1',
-        client: 'Kunde A',
-        service: 'Haarschnitt',
-        stylistIndex: 0,
-        startTime: const TimeOfDay(hour: 9, minute: 0),
-        duration: 60,
-      ),
-      Booking(
-        id: '2',
-        client: 'Kunde B',
-        service: 'Farbe',
-        stylistIndex: 1,
-        startTime: const TimeOfDay(hour: 10, minute: 30),
-        duration: 90,
-      ),
-      Booking(
-        id: '3',
-        client: 'Kunde C',
-        service: 'Bartpflege',
-        stylistIndex: 2,
-        startTime: const TimeOfDay(hour: 13, minute: 0),
-        duration: 30,
-      ),
-    ];
+    _loadData();
+  }
+
+  /// Loads stylists, services and bookings for the selected date from the
+  /// database. This method populates the internal lists and colours
+  /// accordingly. Colours are derived from stylist colour codes when
+  /// available (hex strings), otherwise a default palette is used.
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+    });
+    try {
+      final conn = await DbService.getConnection();
+      // Load stylists (id, name, color). Order by id ensures consistent index mapping.
+      final stylistRows = await conn.query('SELECT id, name, color FROM stylists ORDER BY id');
+      final List<Map<String, dynamic>> stylists = [];
+      final List<Color> colors = [];
+      for (final row in stylistRows) {
+        stylists.add({'id': row['id'], 'name': row['name'], 'color': row['color']});
+        // Parse hex colour if available, otherwise fall back to a default palette entry.
+        final dynamic colorValue = row['color'];
+        if (colorValue is String && colorValue.startsWith('#') && colorValue.length == 7) {
+          final intColor = int.parse(colorValue.substring(1), radix: 16) + 0xFF000000;
+          colors.add(Color(intColor));
+        }
+      }
+      // If not enough colours defined, fill with default swatches.
+      final defaultPalette = [
+        Colors.amber.shade700,
+        Colors.blue.shade600,
+        Colors.green.shade600,
+        Colors.purple.shade600,
+        Colors.red.shade600,
+        Colors.orange.shade600,
+      ];
+      while (colors.length < stylists.length) {
+        colors.add(defaultPalette[colors.length % defaultPalette.length]);
+      }
+      // Load services (id, name, price, duration)
+      final serviceRows = await conn.query('SELECT id, name, price, duration FROM services ORDER BY id');
+      final List<Map<String, dynamic>> services = [];
+      for (final row in serviceRows) {
+        services.add({
+          'id': row['id'],
+          'name': row['name'],
+          'price': row['price'],
+          'duration': row['duration'],
+        });
+      }
+      // Load bookings for the selected date
+      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final bookingRows = await conn.query(
+        '''
+        SELECT b.id,
+               c.first_name AS firstName,
+               c.last_name AS lastName,
+               srv.name AS serviceName,
+               b.stylist_id,
+               b.start_datetime AS startDateTime,
+               b.duration
+        FROM bookings b
+        JOIN customers c ON b.customer_id = c.id
+        JOIN services srv ON b.service_id = srv.id
+        WHERE DATE(b.start_datetime) = ? AND b.status IN ('pending','confirmed')
+        ORDER BY b.start_datetime
+        ''',
+        [dateStr],
+      );
+      final List<Booking> loadedBookings = [];
+      for (final row in bookingRows) {
+        // Determine stylist index by matching stylist_id in stylists list
+        final int stylistId = row['stylist_id'];
+        final int stylistIndex = stylists.indexWhere((s) => s['id'] == stylistId);
+        // Parse start datetime to TimeOfDay
+        DateTime dt;
+        final dynamic v = row['startDateTime'];
+        if (v is DateTime) {
+          dt = v.toLocal();
+        } else if (v is String) {
+          dt = DateTime.parse(v).toLocal();
+        } else {
+          dt = DateTime.now();
+        }
+        final TimeOfDay startTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
+        final String clientName = '${row['firstName']} ${row['lastName']}';
+        loadedBookings.add(Booking(
+          id: row['id'].toString(),
+          client: clientName,
+          service: row['serviceName'],
+          stylistIndex: stylistIndex < 0 ? 0 : stylistIndex,
+          startTime: startTime,
+          duration: row['duration'] as int,
+        ));
+      }
+      await conn.close();
+      setState(() {
+        _stylists = stylists;
+        stylistColors = colors;
+        columnKeys = List.generate(stylists.length, (_) => GlobalKey());
+        _services = services;
+        bookings = loadedBookings;
+        _loading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _loading = false;
+      });
+    }
   }
 
   /// Helper to format TimeOfDay to a readable string.
@@ -110,8 +190,8 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
   /// stylist, start time, duration and enter the client and service name.
   Future<void> _createBooking() async {
     final TextEditingController clientController = TextEditingController();
-    final TextEditingController serviceController = TextEditingController();
     int selectedStylist = 0;
+    int selectedServiceIndex = 0;
     TimeOfDay? selectedTime;
     int selectedDuration = 30;
 
@@ -137,10 +217,29 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
                         }
                       },
                       items: List.generate(
-                        stylists.length,
+                        _stylists.length,
                         (index) => DropdownMenuItem(
                           value: index,
-                          child: Text(stylists[index]),
+                          child: Text(_stylists[index]['name']?.toString() ?? ''),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Service selection
+                    DropdownButton<int>(
+                      value: selectedServiceIndex,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setStateDialog(() {
+                            selectedServiceIndex = value;
+                          });
+                        }
+                      },
+                      items: List.generate(
+                        _services.length,
+                        (index) => DropdownMenuItem(
+                          value: index,
+                          child: Text(_services[index]['name']?.toString() ?? ''),
                         ),
                       ),
                     ),
@@ -183,23 +282,18 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
                       },
                       items: const [
                         DropdownMenuItem(value: 30, child: Text('30 Min')),
+                        DropdownMenuItem(value: 45, child: Text('45 Min')),
                         DropdownMenuItem(value: 60, child: Text('60 Min')),
                         DropdownMenuItem(value: 90, child: Text('90 Min')),
                         DropdownMenuItem(value: 120, child: Text('120 Min')),
                       ],
                     ),
                     const SizedBox(height: 8),
+                    // Client name
                     TextField(
                       controller: clientController,
                       decoration: const InputDecoration(
-                        labelText: 'Kunde',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: serviceController,
-                      decoration: const InputDecoration(
-                        labelText: 'Leistung',
+                        labelText: 'Kunde (Vor- und Nachname)',
                       ),
                     ),
                   ],
@@ -214,24 +308,50 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
               },
               child: const Text('Abbrechen'),
             ),
-            TextButton(
-              onPressed: () {
-                if (selectedTime != null &&
-                    clientController.text.isNotEmpty &&
-                    serviceController.text.isNotEmpty) {
-                  setState(() {
-                    bookings.add(
-                      Booking(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
-                        client: clientController.text,
-                        service: serviceController.text,
-                        stylistIndex: selectedStylist,
-                        startTime: selectedTime!,
-                        duration: selectedDuration,
-                      ),
+            ElevatedButton(
+              onPressed: () async {
+                if (selectedTime != null && clientController.text.isNotEmpty) {
+                  // Parse client name
+                  final names = clientController.text.trim().split(' ');
+                  final firstName = names.isNotEmpty ? names.first : '';
+                  final lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
+                  try {
+                    final conn = await DbService.getConnection();
+                    // Insert new customer
+                    final customerResult = await conn.query(
+                      'INSERT INTO customers (first_name, last_name) VALUES (?, ?)',
+                      [firstName, lastName],
                     );
-                  });
-                  Navigator.of(context).pop();
+                    final int customerId = customerResult.insertId ?? 0;
+                    final stylistId = _stylists[selectedStylist]['id'] as int;
+                    final service = _services[selectedServiceIndex];
+                    final int serviceId = service['id'] as int;
+                    final double price = (service['price'] as num).toDouble();
+                    final int duration = selectedDuration;
+                    final DateTime startDateTime = DateTime(
+                      _selectedDate.year,
+                      _selectedDate.month,
+                      _selectedDate.day,
+                      selectedTime!.hour,
+                      selectedTime!.minute,
+                    );
+                    await conn.query(
+                      'INSERT INTO bookings (customer_id, stylist_id, service_id, start_datetime, duration, price, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                      [customerId, stylistId, serviceId, startDateTime.toUtc(), duration, price, 'pending'],
+                    );
+                    await conn.close();
+                    Navigator.of(context).pop();
+                    // Reload data to reflect new booking
+                    _loadData();
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      const SnackBar(content: Text('Termin erstellt.')),
+                    );
+                  } catch (_) {
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      const SnackBar(content: Text('Fehler beim Erstellen des Termins.')),
+                    );
+                  }
                 }
               },
               child: const Text('Speichern'),
@@ -292,7 +412,7 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
               ],
             ),
             // Columns for each stylist
-            ...List.generate(stylists.length, (stylistIndex) {
+            ...List.generate(_stylists.length, (stylistIndex) {
               return Padding(
                 padding: const EdgeInsets.only(right: 16.0),
                 child: _buildStylistColumn(stylistIndex),
@@ -324,14 +444,14 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
             ),
           ),
           child: Text(
-            stylists[stylistIndex],
+            _stylists[stylistIndex]['name']?.toString() ?? '',
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
         // Drag target for bookings
         DragTarget<Booking>(
           onWillAccept: (data) => true,
-          onAcceptWithDetails: (DragTargetDetails<Booking> details) {
+          onAcceptWithDetails: (DragTargetDetails<Booking> details) async {
             // Translate global drop offset to local position within this column.
             final renderBox = columnKeys[stylistIndex]
                 .currentContext
@@ -339,19 +459,40 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
             if (renderBox != null) {
               final local = renderBox.globalToLocal(details.offset);
               // Subtract the header height to align with the timeline.
-              final y = local.dy - slotHeight;
+              final double y = local.dy - slotHeight;
               // Compute the index of the time slot based on vertical position.
               int slotIndex = (y / slotHeight).floor().clamp(0, slotCount - 1);
               // Derive new start time.
-              final startMinutes =
+              final int startMinutes =
                   (startOfDay.hour * 60 + startOfDay.minute) + slotIndex * 30;
-              final newHour = startMinutes ~/ 60;
-              final newMinute = startMinutes % 60;
+              final int newHour = startMinutes ~/ 60;
+              final int newMinute = startMinutes % 60;
               setState(() {
                 final booking = details.data;
                 booking.stylistIndex = stylistIndex;
                 booking.startTime = TimeOfDay(hour: newHour, minute: newMinute);
               });
+              // Persist the updated position to the database. Use try/catch to swallow errors.
+              try {
+                final booking = details.data;
+                final int bookingId = int.tryParse(booking.id) ?? 0;
+                final int stylistId = _stylists[stylistIndex]['id'] as int;
+                final DateTime newStartDateTime = DateTime(
+                  _selectedDate.year,
+                  _selectedDate.month,
+                  _selectedDate.day,
+                  newHour,
+                  newMinute,
+                );
+                final conn = await DbService.getConnection();
+                await conn.query(
+                  'UPDATE bookings SET stylist_id = ?, start_datetime = ? WHERE id = ?',
+                  [stylistId, newStartDateTime.toUtc(), bookingId],
+                );
+                await conn.close();
+              } catch (_) {
+                // ignore database errors in drag
+              }
             }
           },
           builder: (context, candidateData, rejectedData) {

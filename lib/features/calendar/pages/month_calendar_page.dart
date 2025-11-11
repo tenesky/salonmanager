@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:salonmanager/services/db_service.dart';
 
 // Reuse the Booking model from the day calendar page to represent
 // appointments in the month view. Import with an alias to avoid name
@@ -21,67 +23,121 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
   /// Current month displayed. Changing this will rebuild the grid.
   DateTime _focusedDate = DateTime.now();
 
-  /// Example stylists used for generating bookings. In a real app these
-  /// would be fetched from the backend.
-  final List<String> stylists = ['Anna', 'Ben', 'Caro'];
+  /// Stylists loaded from the database. Each map contains id, name and color.
+  List<Map<String, dynamic>> _stylists = [];
 
-  /// Colour palette matching stylists from the day calendar. Colours are
-  /// chosen from Material swatches to differentiate appointments per
-  /// stylist.
-  late final List<Color> stylistColors;
+  /// Colours derived from stylist colours or default palette.
+  List<Color> _stylistColors = [];
 
   /// A mapping of specific dates to lists of bookings. Each booking
-  /// includes start time, duration and assigned stylist index. This
-  /// sample data is used to populate the month view with dots and the
-  /// day overview modal. Dates are stored with no time component to
-  /// normalise keys.
+  /// includes start time, duration and assigned stylist index. Bookings
+  /// are loaded from the database for the focused month.
   final Map<DateTime, List<day.Booking>> _bookingsByDate = {};
+
+  /// Indicates whether data is currently loading.
+  bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    stylistColors = [
-      Colors.amber.shade700,
-      Colors.blue.shade600,
-      Colors.green.shade600,
-    ];
-    _generateSampleBookings();
+    _loadData();
   }
 
-  /// Generate sample bookings for the current month. This method
-  /// populates _bookingsByDate with a handful of random appointments
-  /// spread across the month. In a real app, the data would come from
-  /// the server based on the selected month and salon【73678961014422†L1528-L1532】.
-  void _generateSampleBookings() {
-    _bookingsByDate.clear();
-    final now = _focusedDate;
-    final year = now.year;
-    final month = now.month;
-    // Create random appointments on a few days for demonstration.
-    final sampleDates = [3, 5, 7, 10, 12, 18, 21, 25];
-    for (final d in sampleDates) {
-      final date = DateTime(year, month, d);
-      // Generate a couple of bookings per day.
-      final List<day.Booking> bookingsOnDay = [];
-      // first booking at 9:00
-      bookingsOnDay.add(day.Booking(
-        id: '${date.day}-1',
-        client: 'Kunde ${date.day}A',
-        service: 'Service 1',
-        stylistIndex: date.day % stylists.length,
-        startTime: const TimeOfDay(hour: 9, minute: 0),
-        duration: 60,
-      ));
-      // second booking at 13:30
-      bookingsOnDay.add(day.Booking(
-        id: '${date.day}-2',
-        client: 'Kunde ${date.day}B',
-        service: 'Service 2',
-        stylistIndex: (date.day + 1) % stylists.length,
-        startTime: const TimeOfDay(hour: 13, minute: 30),
-        duration: 90,
-      ));
-      _bookingsByDate[date] = bookingsOnDay;
+  /// Loads stylists and bookings for the current month from the database.
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+    });
+    try {
+      final conn = await DbService.getConnection();
+      // Load stylists and derive colours.
+      final stylistRows = await conn.query('SELECT id, name, color FROM stylists ORDER BY id');
+      final List<Map<String, dynamic>> stylists = [];
+      final List<Color> colors = [];
+      for (final row in stylistRows) {
+        stylists.add({'id': row['id'], 'name': row['name'], 'color': row['color']});
+        final dynamic colorValue = row['color'];
+        if (colorValue is String && colorValue.startsWith('#') && colorValue.length == 7) {
+          final intColor = int.parse(colorValue.substring(1), radix: 16) + 0xFF000000;
+          colors.add(Color(intColor));
+        }
+      }
+      final defaultPalette = [
+        Colors.amber.shade700,
+        Colors.blue.shade600,
+        Colors.green.shade600,
+        Colors.purple.shade600,
+        Colors.red.shade600,
+        Colors.orange.shade600,
+      ];
+      while (colors.length < stylists.length) {
+        colors.add(defaultPalette[colors.length % defaultPalette.length]);
+      }
+      // Determine first and last date of the month.
+      final DateTime firstDay = DateTime(_focusedDate.year, _focusedDate.month, 1);
+      final DateTime lastDay = DateTime(_focusedDate.year, _focusedDate.month + 1, 0);
+      final String startDateStr = DateFormat('yyyy-MM-dd').format(firstDay);
+      final String endDateStr = DateFormat('yyyy-MM-dd').format(lastDay);
+      final bookingRows = await conn.query(
+        '''
+        SELECT b.id,
+               b.start_datetime AS startDateTime,
+               b.duration,
+               b.price,
+               b.stylist_id,
+               c.first_name AS firstName,
+               c.last_name AS lastName,
+               srv.name AS serviceName
+        FROM bookings b
+        JOIN customers c ON b.customer_id = c.id
+        JOIN services srv ON b.service_id = srv.id
+        WHERE DATE(b.start_datetime) BETWEEN ? AND ?
+          AND b.status IN ('pending','confirmed')
+        ORDER BY b.start_datetime ASC
+        ''',
+        [startDateStr, endDateStr],
+      );
+      final Map<DateTime, List<day.Booking>> grouped = {};
+      for (final row in bookingRows) {
+        // Determine stylist index by matching ID in stylists list.
+        final int stylistId = row['stylist_id'];
+        final int stylistIndex = stylists.indexWhere((s) => s['id'] == stylistId);
+        // Parse start datetime
+        DateTime dt;
+        final dynamic v = row['startDateTime'];
+        if (v is DateTime) {
+          dt = v.toLocal();
+        } else if (v is String) {
+          dt = DateTime.parse(v).toLocal();
+        } else {
+          dt = DateTime.now();
+        }
+        final TimeOfDay timeOfDay = TimeOfDay(hour: dt.hour, minute: dt.minute);
+        final dayDate = DateTime(dt.year, dt.month, dt.day);
+        final String clientName = '${row['firstName']} ${row['lastName']}';
+        final booking = day.Booking(
+          id: row['id'].toString(),
+          client: clientName,
+          service: row['serviceName'],
+          stylistIndex: stylistIndex < 0 ? 0 : stylistIndex,
+          startTime: timeOfDay,
+          duration: row['duration'] as int,
+        );
+        grouped.putIfAbsent(dayDate, () => []).add(booking);
+      }
+      await conn.close();
+      setState(() {
+        _stylists = stylists;
+        _stylistColors = colors;
+        _bookingsByDate
+          ..clear()
+          ..addAll(grouped);
+        _loading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _loading = false;
+      });
     }
   }
 
@@ -92,21 +148,20 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
     return bookings.where((b) => b.stylistIndex == stylistIndex).length;
   }
 
-  /// Move to the previous month and regenerate bookings. In a full app
-  /// this would trigger a data reload from the backend.
+  /// Move to the previous month and reload data from the database.
   void _goToPreviousMonth() {
     setState(() {
       _focusedDate = DateTime(_focusedDate.year, _focusedDate.month - 1);
-      _generateSampleBookings();
     });
+    _loadData();
   }
 
-  /// Move to the next month and regenerate bookings.
+  /// Move to the next month and reload data from the database.
   void _goToNextMonth() {
     setState(() {
       _focusedDate = DateTime(_focusedDate.year, _focusedDate.month + 1);
-      _generateSampleBookings();
     });
+    _loadData();
   }
 
   @override
@@ -209,7 +264,7 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
       return const SizedBox.shrink();
     }
     // Count bookings per stylist.
-    final counts = List<int>.generate(stylists.length, (_) => 0);
+    final counts = List<int>.generate(_stylists.length, (_) => 0);
     for (final b in bookings) {
       if (b.stylistIndex >= 0 && b.stylistIndex < counts.length) {
         counts[b.stylistIndex]++;
@@ -227,7 +282,7 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
             height: 5,
             margin: const EdgeInsets.only(right: 2, bottom: 2),
             decoration: BoxDecoration(
-              color: stylistColors[index % stylistColors.length],
+              color: _stylistColors[index % _stylistColors.length],
               shape: BoxShape.circle,
             ),
           );
@@ -246,8 +301,8 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
         return DayOverviewSheet(
           date: date,
           bookings: bookings,
-          stylists: stylists,
-          stylistColors: stylistColors,
+          stylists: _stylists.map((s) => s['name']?.toString() ?? '').toList(),
+          stylistColors: _stylistColors,
         );
       },
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../widgets/reschedule_dialog.dart';
+import 'package:salonmanager/services/db_service.dart';
 
 /// A page that displays a list of incoming booking requests for
 /// stylists or managers. Each request is represented by a card
@@ -27,51 +28,129 @@ class _IncomingBookingsPageState extends State<IncomingBookingsPage> {
   /// an id, customer name, service title and the requested
   /// appointment date/time. When a request is accepted or declined
   /// it will be removed from this list.
-  final List<Map<String, dynamic>> _incomingBookings = [
-    {
-      'id': 1,
-      'customer': 'Anna Schmidt',
-      'service': 'Haarschnitt (Damen)',
-      'datetime': DateTime(2025, 11, 14, 10, 30),
-    },
-    {
-      'id': 2,
-      'customer': 'Max Müller',
-      'service': 'Herrenhaarschnitt',
-      'datetime': DateTime(2025, 11, 14, 12, 0),
-    },
-    {
-      'id': 3,
-      'customer': 'Sofia Becker',
-      'service': 'Balayage & Styling',
-      'datetime': DateTime(2025, 11, 15, 9, 0),
-    },
-  ];
+  /// Incoming bookings loaded from the database. Each entry contains
+  /// an id, customer name, service name and start time.
+  List<Map<String, dynamic>> _incomingBookings = [];
 
-  /// Accepts a booking request. This removes the booking from the
-  /// incoming list and shows a brief confirmation via a snackbar.
-  void _acceptBooking(int id) {
-    setState(() {
-      _incomingBookings.removeWhere((booking) => booking['id'] == id);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Buchung angenommen.')),
-    );
+  /// Indicates whether data is currently being loaded from the
+  /// database. While loading, a progress indicator is shown.
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIncomingBookings();
   }
 
-  /// Declines a booking request by opening the reschedule dialog.
-  /// The stylist can select up to three alternative date/time
-  /// combinations. Once proposals are submitted a confirmation
-  /// snackbar is shown. The booking remains in the list for now.
+  /// Loads all pending bookings from the database. Queries the
+  /// bookings table for rows with status 'pending' and joins the
+  /// customers and services tables to get names. The resulting list
+  /// contains maps with keys id, customer, service and datetime.
+  Future<void> _loadIncomingBookings() async {
+    setState(() {
+      _loading = true;
+    });
+    try {
+      final conn = await DbService.getConnection();
+      final results = await conn.query(
+        '''
+        SELECT b.id,
+               c.first_name AS firstName,
+               c.last_name AS lastName,
+               s.name AS serviceName,
+               b.start_datetime AS startDateTime
+        FROM bookings b
+        JOIN customers c ON b.customer_id = c.id
+        JOIN services s ON b.service_id = s.id
+        WHERE b.status = 'pending'
+        ORDER BY b.start_datetime ASC
+        '''
+      );
+      final bookings = <Map<String, dynamic>>[];
+      for (final row in results) {
+        final DateTime dt;
+        final dynamic dateTimeValue = row['startDateTime'];
+        if (dateTimeValue is DateTime) {
+          dt = dateTimeValue;
+        } else if (dateTimeValue is String) {
+          dt = DateTime.parse(dateTimeValue);
+        } else {
+          dt = DateTime.now();
+        }
+        bookings.add({
+          'id': row['id'],
+          'customer': '${row['firstName']} ${row['lastName']}',
+          'service': row['serviceName'],
+          'datetime': dt,
+        });
+      }
+      await conn.close();
+      setState(() {
+        _incomingBookings = bookings;
+        _loading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  /// Accepts a booking request. Updates the booking status to
+  /// 'confirmed' in the database and removes it from the list.
+  Future<void> _acceptBooking(int id) async {
+    try {
+      final conn = await DbService.getConnection();
+      await conn.query(
+        'UPDATE bookings SET status = ? WHERE id = ?',
+        ['confirmed', id],
+      );
+      await conn.close();
+      setState(() {
+        _incomingBookings.removeWhere((b) => b['id'] == id);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Buchung angenommen.')),
+      );
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Fehler beim Aktualisieren der Buchung.')),
+      );
+    }
+  }
+
+  /// Declines a booking request. Opens the reschedule dialog and
+  /// inserts suggested alternatives into the database. Each
+  /// suggested date/time is stored in the `reschedule_suggestions`
+  /// table. After sending suggestions, the booking remains pending
+  /// until accepted or manually cancelled.
   Future<void> _declineBooking(Map<String, dynamic> booking) async {
     final result = await showDialog<List<Map<String, dynamic>?>>(
       context: context,
       builder: (context) => const RescheduleDialog(),
     );
     if (result != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Umbuchungsvorschlag gesendet.')),
-      );
+      try {
+        final conn = await DbService.getConnection();
+        for (final suggestion in result) {
+          if (suggestion == null) continue;
+          final dynamic dt = suggestion['datetime'];
+          if (dt is DateTime) {
+            await conn.query(
+              'INSERT INTO reschedule_suggestions (booking_id, suggestion_datetime) VALUES (?, ?)',
+              [booking['id'], dt.toUtc()],
+            );
+          }
+        }
+        await conn.close();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Umbuchungsvorschlag gesendet.')),
+        );
+      } catch (_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Fehler beim Senden des Vorschlags.')),
+        );
+      }
     }
   }
 
@@ -81,63 +160,65 @@ class _IncomingBookingsPageState extends State<IncomingBookingsPage> {
       appBar: AppBar(
         title: const Text('Eingehende Buchungsanfragen'),
       ),
-      body: _incomingBookings.isEmpty
-          ? const Center(child: Text('Keine neuen Buchungsanfragen.'))
-          : ListView.separated(
-              padding: const EdgeInsets.all(16.0),
-              itemCount: _incomingBookings.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final booking = _incomingBookings[index];
-                final DateTime dateTime = booking['datetime'] as DateTime;
-                final String formattedDate =
-                    '${dateTime.day.toString().padLeft(2, '0')}.${dateTime.month.toString().padLeft(2, '0')}.${dateTime.year}';
-                final String formattedTime =
-                    '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          booking['customer'] as String,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          booking['service'] as String,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$formattedDate • $formattedTime',
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _incomingBookings.isEmpty
+              ? const Center(child: Text('Keine neuen Buchungsanfragen.'))
+              : ListView.separated(
+                  padding: const EdgeInsets.all(16.0),
+                  itemCount: _incomingBookings.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final booking = _incomingBookings[index];
+                    final DateTime dateTime = booking['datetime'] as DateTime;
+                    final String formattedDate =
+                        '${dateTime.day.toString().padLeft(2, '0')}.${dateTime.month.toString().padLeft(2, '0')}.${dateTime.year}';
+                    final String formattedTime =
+                        '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            ElevatedButton(
-                              onPressed: () => _acceptBooking(booking['id'] as int),
-                              child: const Text('Annehmen'),
+                            Text(
+                              booking['customer'] as String,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                            const SizedBox(width: 8),
-                            OutlinedButton(
-                              onPressed: () => _declineBooking(booking),
-                              child: const Text('Ablehnen'),
+                            const SizedBox(height: 4),
+                            Text(
+                              booking['service'] as String,
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$formattedDate • $formattedTime',
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                ElevatedButton(
+                                  onPressed: () => _acceptBooking(booking['id'] as int),
+                                  child: const Text('Annehmen'),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  onPressed: () => _declineBooking(booking),
+                                  child: const Text('Ablehnen'),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }

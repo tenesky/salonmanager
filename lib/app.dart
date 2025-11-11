@@ -141,9 +141,11 @@ class MyApp extends StatelessWidget {
         // professional detail page allows adjusting price/duration per
         // service, adding notes and uploading images (Screen 30).
         '/bookings/pro-detail': (context) {
+          // Expect a map containing the booking id. The professional
+          // detail page will load the booking data from the database.
           final args = ModalRoute.of(context)?.settings.arguments;
-          if (args is Map<String, dynamic>) {
-            return BookingProfessionalDetailPage(booking: args);
+          if (args is Map<String, dynamic> && args.containsKey('id')) {
+            return BookingProfessionalDetailPage(bookingId: args['id'] as int);
           }
           return const Scaffold(
             body: Center(child: Text('Keine Details verfügbar.')),

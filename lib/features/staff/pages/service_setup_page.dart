@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:salonmanager/services/db_service.dart';
 
 /// A page that allows managers or stylists to configure which services
 /// each stylist offers and to override the default price and duration
@@ -16,50 +17,97 @@ class ServiceSetupPage extends StatefulWidget {
 }
 
 class _ServiceSetupPageState extends State<ServiceSetupPage> {
-  // Example stylists. In a real application these would be loaded from
-  // the backend. Each has a unique id and a display name.
-  final List<Map<String, dynamic>> _stylists = [
-    {'id': 1, 'name': 'Max'},
-    {'id': 2, 'name': 'Sofia'},
-    {'id': 3, 'name': 'Tom'},
-  ];
-
-  // Example services. These represent the available treatments or
-  // appointments. Each has a unique id and a descriptive name.
-  final List<Map<String, dynamic>> _services = [
-    {'id': 1, 'name': 'Haarschnitt'},
-    {'id': 2, 'name': 'Färben'},
-    {'id': 3, 'name': 'Balayage'},
-    {'id': 4, 'name': 'Styling'},
-  ];
-
-  /// Stores the price, duration and activation state for each service
-  /// per stylist. The first key is the service id, the second key is
-  /// the stylist id. Each value is a map containing:
-  ///  - price: double (in EUR)
-  ///  - duration: int (minutes)
-  ///  - active: bool
-  late final Map<int, Map<int, Map<String, dynamic>>> _cellData;
+  /// List of stylists loaded from the database.
+  List<Map<String, dynamic>> _stylists = [];
+  /// List of services loaded from the database.
+  List<Map<String, dynamic>> _services = [];
+  /// Stores the price, duration and activation state for each service per stylist.
+  /// The first key is the service id, the second key is the stylist id.
+  Map<int, Map<int, Map<String, dynamic>>> _cellData = {};
+  /// Indicates whether data is currently being loaded.
+  bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    _initCellData();
+    _loadData();
   }
 
-  void _initCellData() {
-    _cellData = {};
-    for (final service in _services) {
-      final int sid = service['id'] as int;
-      _cellData[sid] = {};
-      for (final stylist in _stylists) {
-        final int stid = stylist['id'] as int;
-        _cellData[sid]![stid] = {
-          'price': 50.0,
-          'duration': 60,
-          'active': true,
+  /// Loads stylists, services and existing employee_service overrides from
+  /// the database. Populates the [_stylists], [_services] and
+  /// [_cellData] structures. Default price and duration values come
+  /// from the services table. The active flag defaults to false
+  /// unless an override exists.
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+    });
+    try {
+      final conn = await DbService.getConnection();
+      // Load stylists
+      final stylistResults = await conn.query('SELECT id, name FROM stylists ORDER BY id');
+      final List<Map<String, dynamic>> stylists = [];
+      for (final row in stylistResults) {
+        stylists.add({'id': row['id'], 'name': row['name']});
+      }
+      // Load services
+      final serviceResults = await conn.query('SELECT id, name, price, duration FROM services ORDER BY id');
+      final List<Map<String, dynamic>> services = [];
+      for (final row in serviceResults) {
+        services.add({
+          'id': row['id'],
+          'name': row['name'],
+          'price': row['price'],
+          'duration': row['duration'],
+        });
+      }
+      // Load existing overrides
+      final overrideResults = await conn.query(
+        'SELECT stylist_id, service_id, price, duration, active FROM employee_service',
+      );
+      final Map<String, Map<String, dynamic>> overrides = {};
+      for (final row in overrideResults) {
+        overrides['${row['service_id']}_${row['stylist_id']}'] = {
+          'price': row['price'],
+          'duration': row['duration'],
+          'active': row['active'] == 1 || row['active'] == true,
         };
       }
+      // Build cell data
+      final Map<int, Map<int, Map<String, dynamic>>> cellData = {};
+      for (final service in services) {
+        final int sid = service['id'] as int;
+        cellData[sid] = {};
+        for (final stylist in stylists) {
+          final int stid = stylist['id'] as int;
+          final key = '${sid}_${stid}';
+          if (overrides.containsKey(key)) {
+            final override = overrides[key]!;
+            cellData[sid]![stid] = {
+              'price': override['price'] ?? service['price'],
+              'duration': override['duration'] ?? service['duration'],
+              'active': override['active'] ?? false,
+            };
+          } else {
+            cellData[sid]![stid] = {
+              'price': service['price'],
+              'duration': service['duration'],
+              'active': false,
+            };
+          }
+        }
+      }
+      await conn.close();
+      setState(() {
+        _stylists = stylists;
+        _services = services;
+        _cellData = cellData;
+        _loading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _loading = false;
+      });
     }
   }
 
@@ -187,30 +235,58 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
       children: rows,
     );
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Leistungs-Setup je Stylist'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: _buildTable(),
-        ),
-      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: _buildTable(),
+              ),
+            ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.all(16.0),
         child: ElevatedButton(
-          onPressed: () {
-            // In a real implementation, here you would persist the data to the
-            // backend. For now we just show a confirmation snackbar.
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Leistungs-Setup gespeichert')),
-            );
-          },
+          onPressed: _loading
+              ? null
+              : () async {
+                  // Persist the matrix values to the database. Use an
+                  // upsert to either insert a new record or update an
+                  // existing one.
+                  try {
+                    final conn = await DbService.getConnection();
+                    for (final serviceEntry in _cellData.entries) {
+                      final int sid = serviceEntry.key;
+                      final Map<int, Map<String, dynamic>> stylistMap = serviceEntry.value;
+                      for (final stylistEntry in stylistMap.entries) {
+                        final int stid = stylistEntry.key;
+                        final Map<String, dynamic> cell = stylistEntry.value;
+                        final double price = cell['price'] as double;
+                        final int duration = cell['duration'] as int;
+                        final bool active = cell['active'] as bool;
+                        await conn.query(
+                          'INSERT INTO employee_service (stylist_id, service_id, price, duration, active) VALUES (?, ?, ?, ?, ?)
+                          ON DUPLICATE KEY UPDATE price = VALUES(price), duration = VALUES(duration), active = VALUES(active)',
+                          [stid, sid, price, duration, active ? 1 : 0],
+                        );
+                      }
+                    }
+                    await conn.close();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Leistungs-Setup gespeichert')),
+                    );
+                  } catch (_) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Fehler beim Speichern des Leistungs-Setups.')),
+                    );
+                  }
+                },
           child: const Text('Speichern'),
         ),
       ),

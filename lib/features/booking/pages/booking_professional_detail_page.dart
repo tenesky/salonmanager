@@ -2,57 +2,45 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:salonmanager/services/db_service.dart';
 
 /// Detail page for stylists to view and edit booking information.
 ///
-/// This page extends the basic booking detail view by allowing the
-/// professional to modify the price and duration for each service
-/// within a booking, add internal notes and upload images (for
-/// example, to store before/after photos). It corresponds to
-/// Screen 30 in the specification, which requires editable
-/// service details and note/image fields【219863215679107†L39-L47】.
+/// Rather than requiring the entire booking data to be passed in via
+/// arguments, this page accepts a booking identifier and loads the
+/// corresponding record from the database. It allows editing the
+/// price and duration for the booked service, adding internal notes
+/// and uploading images (images are not persisted in this demo). This
+/// corresponds to Screen 30 in the specification【219863215679107†L39-L47】.
 class BookingProfessionalDetailPage extends StatefulWidget {
-  /// Expects a booking map containing keys such as `customerName`,
-  /// `services`, `date`, `time`, `notes`, `imagePaths` and `stylistName`.
-  final Map<String, dynamic> booking;
-  const BookingProfessionalDetailPage({Key? key, required this.booking}) : super(key: key);
+  /// The unique ID of the booking to display.
+  final int bookingId;
+  const BookingProfessionalDetailPage({Key? key, required this.bookingId}) : super(key: key);
 
   @override
   State<BookingProfessionalDetailPage> createState() => _BookingProfessionalDetailPageState();
 }
 
 class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetailPage> {
-  late List<Map<String, dynamic>> _services;
+  /// Holds basic booking info: customerName, stylistName, date, time.
+  Map<String, dynamic>? _bookingInfo;
+  /// Holds the service associated with the booking. In this simplified
+  /// schema a booking has only one service. Each map contains
+  /// `name`, `price` and `duration` fields.
+  List<Map<String, dynamic>> _services = [];
+  /// Controller for internal notes.
   late TextEditingController _notesController;
+  /// List of selected images (not saved to the database in this demo).
   final List<XFile> _images = [];
   final ImagePicker _picker = ImagePicker();
+  /// Loading indicator while data is fetched.
+  bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialise services from booking data. Each service entry should
-    // include a `name`, `price` and `duration` field. If the booking
-    // does not provide services, start with an empty list.
-    final List<dynamic>? servicesDynamic = widget.booking['services'] as List<dynamic>?;
-    _services = servicesDynamic
-            ?.map((e) => {
-                  'name': e['name'] ?? '',
-                  'price': e['price'] ?? 0.0,
-                  'duration': e['duration'] ?? 0,
-                })
-            .toList() ??
-        [];
-    // Notes controller initialised with existing notes (if any).
-    _notesController = TextEditingController(text: widget.booking['notes']?.toString() ?? '');
-    // Load existing images from file paths if provided.
-    final List<dynamic>? imagePaths = widget.booking['imagePaths'] as List<dynamic>?;
-    if (imagePaths != null) {
-      for (final path in imagePaths) {
-        if (path is String) {
-          _images.add(XFile(path));
-        }
-      }
-    }
+    _notesController = TextEditingController();
+    _loadBooking();
   }
 
   @override
@@ -61,10 +49,66 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
     super.dispose();
   }
 
-  /// Opens a dialog allowing the stylist to edit the price and duration
-  /// for a given service. The [index] identifies which service in
-  /// [_services] to modify. After the user confirms, the service
-  /// details are updated via setState.
+  /// Fetch booking details from the database. Joins with related
+  /// tables to get human‑readable names and the booked service.
+  Future<void> _loadBooking() async {
+    setState(() {
+      _loading = true;
+    });
+    try {
+      final conn = await DbService.getConnection();
+      final results = await conn.query(
+        '''
+        SELECT b.id, b.start_datetime AS startDateTime, b.duration AS bookingDuration, b.price AS bookingPrice,
+               b.notes AS bookingNotes, b.status,
+               c.first_name AS customerFirstName, c.last_name AS customerLastName,
+               st.name AS stylistName,
+               srv.id AS serviceId, srv.name AS serviceName
+        FROM bookings b
+        JOIN customers c ON b.customer_id = c.id
+        JOIN stylists st ON b.stylist_id = st.id
+        JOIN services srv ON b.service_id = srv.id
+        WHERE b.id = ?
+        ''',
+        [widget.bookingId],
+      );
+      if (results.isNotEmpty) {
+        final row = results.first;
+        DateTime dt;
+        final dynamic v = row['startDateTime'];
+        if (v is DateTime) {
+          dt = v.toLocal();
+        } else if (v is String) {
+          dt = DateTime.parse(v).toLocal();
+        } else {
+          dt = DateTime.now();
+        }
+        _bookingInfo = {
+          'customerName': '${row['customerFirstName']} ${row['customerLastName']}',
+          'stylistName': row['stylistName'],
+          'date': '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year}',
+          'time': '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}',
+        };
+        _services = [
+          {
+            'serviceId': row['serviceId'],
+            'name': row['serviceName'],
+            'price': row['bookingPrice'],
+            'duration': row['bookingDuration'],
+          }
+        ];
+        _notesController.text = row['bookingNotes']?.toString() ?? '';
+      }
+      await conn.close();
+    } catch (_) {
+      // ignore errors
+    }
+    setState(() {
+      _loading = false;
+    });
+  }
+
+  /// Opens a dialog to edit the price and duration of the single service.
   Future<void> _editService(int index) async {
     final service = _services[index];
     final priceController = TextEditingController(text: service['price'].toString());
@@ -79,7 +123,7 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
             children: [
               TextField(
                 controller: priceController,
-                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
                   labelText: 'Preis (€)',
                 ),
@@ -95,23 +139,34 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text('Abbrechen'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 final double? newPrice = double.tryParse(priceController.text);
                 final int? newDuration = int.tryParse(durationController.text);
-                setState(() {
-                  if (newPrice != null) _services[index]['price'] = newPrice;
-                  if (newDuration != null) _services[index]['duration'] = newDuration;
-                });
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Leistung aktualisiert.')),
-                );
+                if (newPrice != null && newDuration != null) {
+                  setState(() {
+                    _services[index]['price'] = newPrice;
+                    _services[index]['duration'] = newDuration;
+                  });
+                  // Persist the changes to the database.
+                  try {
+                    final conn = await DbService.getConnection();
+                    await conn.query(
+                      'UPDATE bookings SET price = ?, duration = ? WHERE id = ?',
+                      [newPrice, newDuration, widget.bookingId],
+                    );
+                    await conn.close();
+                  } catch (_) {
+                    // ignore errors
+                  }
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Leistung aktualisiert.')),
+                  );
+                }
               },
               child: const Text('Speichern'),
             ),
@@ -121,9 +176,7 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
     );
   }
 
-  /// Allows the stylist to pick images from the gallery. Uses the
-  /// [ImagePicker] to allow multiple selections. Selected images are
-  /// appended to [_images] and displayed in the UI.
+  /// Handles image picking. In this demo images are kept only in memory.
   Future<void> _pickImages() async {
     try {
       final picked = await _picker.pickMultiImage();
@@ -133,24 +186,44 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
         });
       }
     } catch (_) {
-      // Ignore errors silently.
+      // ignore
     }
   }
 
-  /// Removes an image at the given index from the list of selected
-  /// images.
   void _removeImage(int index) {
     setState(() {
       _images.removeAt(index);
     });
   }
 
-  /// Builds a card widget displaying customer and appointment details.
+  /// Saves notes to the database.
+  Future<void> _saveNotes() async {
+    final String notes = _notesController.text;
+    try {
+      final conn = await DbService.getConnection();
+      await conn.query(
+        'UPDATE bookings SET notes = ? WHERE id = ?',
+        [notes, widget.bookingId],
+      );
+      await conn.close();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notizen gespeichert.')),
+      );
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Fehler beim Speichern der Notizen.')),
+      );
+    }
+  }
+
   Widget _buildCustomerCard() {
-    final String customerName = widget.booking['customerName']?.toString() ?? '–';
-    final String stylistName = widget.booking['stylistName']?.toString() ?? '–';
-    final String date = widget.booking['date']?.toString() ?? '';
-    final String time = widget.booking['time']?.toString() ?? '';
+    if (_bookingInfo == null) {
+      return const SizedBox.shrink();
+    }
+    final String customerName = _bookingInfo!['customerName'] ?? '';
+    final String stylistName = _bookingInfo!['stylistName'] ?? '';
+    final String date = _bookingInfo!['date'] ?? '';
+    final String time = _bookingInfo!['time'] ?? '';
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       child: ListTile(
@@ -167,7 +240,6 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
     );
   }
 
-  /// Builds a card containing a list of all services for the booking.
   Widget _buildServicesCard() {
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
@@ -180,18 +252,18 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
               children: const [
                 Icon(Icons.design_services),
                 SizedBox(width: 8),
-                Text('Leistungen', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('Leistung', style: TextStyle(fontWeight: FontWeight.bold)),
               ],
             ),
             const SizedBox(height: 8),
             if (_services.isEmpty)
-              const Text('Keine Leistungen hinterlegt.'),
+              const Text('Keine Leistung hinterlegt.'),
             for (int i = 0; i < _services.length; i++)
               ListTile(
                 contentPadding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 0.0),
                 title: Text(_services[i]['name']?.toString() ?? ''),
                 subtitle: Text(
-                  'Preis: ${_services[i]['price'].toStringAsFixed(2)} € • Dauer: ${_services[i]['duration']} min',
+                  'Preis: ${(_services[i]['price'] as num).toStringAsFixed(2)} € • Dauer: ${_services[i]['duration']} min',
                 ),
                 trailing: IconButton(
                   icon: const Icon(Icons.edit),
@@ -204,7 +276,6 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
     );
   }
 
-  /// Builds a card for the stylist to enter or edit internal notes.
   Widget _buildNotesCard() {
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
@@ -233,11 +304,7 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
             Align(
               alignment: Alignment.centerRight,
               child: ElevatedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Notizen gespeichert.')),
-                  );
-                },
+                onPressed: _saveNotes,
                 child: const Text('Notizen speichern'),
               ),
             ),
@@ -247,9 +314,6 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
     );
   }
 
-  /// Builds a card to display selected images and allow adding/removing
-  /// additional photos. Uses a horizontal ListView for thumbnails and
-  /// a button to pick more images from the gallery.
   Widget _buildImagesCard() {
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
@@ -334,18 +398,20 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
       appBar: AppBar(
         title: const Text('Termin‑Detail (Profi)'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildCustomerCard(),
-            _buildServicesCard(),
-            _buildNotesCard(),
-            _buildImagesCard(),
-          ],
-        ),
-      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildCustomerCard(),
+                  _buildServicesCard(),
+                  _buildNotesCard(),
+                  _buildImagesCard(),
+                ],
+              ),
+            ),
     );
   }
 }
