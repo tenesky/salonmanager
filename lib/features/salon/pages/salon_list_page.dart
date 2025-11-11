@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'salon_detail_page.dart';
+import '../models/salon.dart';
 
 /// A page displaying a list of salons. This implementation uses
 /// static sample data to populate the list. Later the data can be
@@ -73,8 +75,19 @@ class SalonListPage extends StatelessWidget {
                 ],
               ),
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Salon "${salon['name']}" ausgewählt (Demo)')),
+                // Build a Salon object with placeholder images and details
+                final detailSalon = Salon(
+                  name: salon['name'] as String,
+                  coverImage: 'assets/background_dark.png',
+                  logoImage: 'assets/logo_full.png',
+                  address: 'Musterstraße 1, 12345 Musterstadt',
+                  openingHours: 'Mo–Sa 09:00–18:00',
+                  phone: '+49 123 4567890',
+                );
+                Navigator.pushNamed(
+                  context,
+                  '/salon-detail',
+                  arguments: detailSalon,
                 );
               },
             ),

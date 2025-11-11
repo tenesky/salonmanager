@@ -104,11 +104,17 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
               ElevatedButton(
                 onPressed: () {
                   if (_formKey.currentState!.validate()) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Registrierung abgeschickt (Demo).')),
-                    );
+                    // Navigiere nach erfolgreicher Registrierung zum Onboarding
+                    Navigator.of(context).pushReplacementNamed('/onboarding-customer');
                   }
                 },
+                // In dunklen Themes soll der Button weiß sein mit schwarzer Schrift.
+                style: Theme.of(context).brightness == Brightness.dark
+                    ? ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                      )
+                    : null,
                 child: const Text('Registrieren'),
               ),
               const SizedBox(height: 16),

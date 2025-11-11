@@ -113,11 +113,17 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
               ElevatedButton(
                 onPressed: () {
                   if (_formKey.currentState!.validate()) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Salon‑Registrierung abgeschickt (Demo).')),
-                    );
+                    // Navigiere nach erfolgreicher Registrierung zum Salon‑Onboarding
+                    Navigator.of(context).pushReplacementNamed('/onboarding-salon');
                   }
                 },
+                // In dunklen Themes soll der Button weiß sein mit schwarzer Schrift.
+                style: Theme.of(context).brightness == Brightness.dark
+                    ? ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                      )
+                    : null,
                 child: const Text('Registrieren'),
               ),
               const SizedBox(height: 16),

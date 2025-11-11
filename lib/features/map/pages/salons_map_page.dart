@@ -1,0 +1,346 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+
+/// Model representing a salon location with basic attributes used for
+/// filtering and display on the map. In a real application this
+/// information would come from the backend. Here we provide a small
+/// static list to enable the interactive map and filter functionality.
+class SalonLocation {
+  final String name;
+  final LatLng location;
+  final String priceLevel; // e.g. '$', '$$', '$$$'
+  final double rating; // 0–5 stars
+  final bool hasFreeAppointments;
+
+  const SalonLocation({
+    required this.name,
+    required this.location,
+    required this.priceLevel,
+    required this.rating,
+    required this.hasFreeAppointments,
+  });
+}
+
+/// Page displaying an interactive Leaflet map with salons. A floating
+/// filter button opens a bottom sheet allowing the user to filter
+/// salons by distance, price, rating and availability. Tapping a
+/// marker shows a bottom sheet with salon details and a call to
+/// action. This page corresponds to the specification for the
+/// interactive map & filter drawer (Modul B, Screen 11/12)【522868310347694†L209-L214】.
+class SalonsMapPage extends StatefulWidget {
+  const SalonsMapPage({Key? key}) : super(key: key);
+
+  @override
+  State<SalonsMapPage> createState() => _SalonsMapPageState();
+}
+
+class _SalonsMapPageState extends State<SalonsMapPage> {
+  // List of example salons. Coordinates are roughly around Munich, DE.
+  final List<SalonLocation> _salons = const [
+    SalonLocation(
+      name: 'Salon Elegance',
+      location: LatLng(48.137154, 11.576124),
+      priceLevel: '\$\$',
+      rating: 4.8,
+      hasFreeAppointments: true,
+    ),
+    SalonLocation(
+      name: 'Hair Couture',
+      location: LatLng(48.1365, 11.5800),
+      priceLevel: '\$\$\$',
+      rating: 4.6,
+      hasFreeAppointments: false,
+    ),
+    SalonLocation(
+      name: 'Golden Scissors',
+      location: LatLng(48.1390, 11.5750),
+      priceLevel: '\$\$',
+      rating: 4.7,
+      hasFreeAppointments: true,
+    ),
+    SalonLocation(
+      name: 'City Cuts',
+      location: LatLng(48.1351, 11.5793),
+      priceLevel: '\$',
+      rating: 4.4,
+      hasFreeAppointments: true,
+    ),
+    SalonLocation(
+      name: 'Stylish Trends',
+      location: LatLng(48.1385, 11.5732),
+      priceLevel: '\$\$\$',
+      rating: 4.9,
+      hasFreeAppointments: false,
+    ),
+  ];
+
+  // Filter state
+  double _maxDistance = 10.0; // kilometres
+  Set<String> _selectedPriceLevels = {};
+  double _minRating = 0.0;
+  bool _onlyFree = false;
+
+  // Map centre. In a real app this would be the user's location.
+  final LatLng _mapCenter = const LatLng(48.137154, 11.576124);
+
+  /// Returns a filtered list of salons based on the current filter
+  /// settings. Distance is computed from a fixed centre for
+  /// demonstration purposes. The `latlong2` Distance helper is used
+  /// to calculate kilometres between points.
+  List<SalonLocation> get _filteredSalons {
+    final distanceCalc = Distance();
+    return _salons.where((salon) {
+      // Filter by distance
+      final distKm = distanceCalc.as(LengthUnit.Kilometer, _mapCenter, salon.location);
+      if (distKm > _maxDistance) return false;
+      // Filter by price level if any selected
+      if (_selectedPriceLevels.isNotEmpty && !_selectedPriceLevels.contains(salon.priceLevel)) {
+        return false;
+      }
+      // Filter by rating
+      if (salon.rating < _minRating) return false;
+      // Filter by availability
+      if (_onlyFree && !salon.hasFreeAppointments) return false;
+      return true;
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Salons auf der Karte'),
+      ),
+      body: FlutterMap(
+        options: MapOptions(
+          center: _mapCenter,
+          zoom: 14.0,
+          minZoom: 5,
+          maxZoom: 18,
+        ),
+        children: [
+          TileLayer(
+            urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            subdomains: const ['a', 'b', 'c'],
+            userAgentPackageName: 'com.example.salonmanager',
+          ),
+          MarkerLayer(
+            markers: _filteredSalons.map((salon) {
+              return Marker(
+                point: salon.location,
+                width: 40,
+                height: 40,
+                builder: (ctx) => GestureDetector(
+                  onTap: () => _showSalonDetails(salon),
+                  child: Icon(
+                    Icons.location_on,
+                    size: 40,
+                    color: theme.brightness == Brightness.dark
+                        ? Colors.amber.shade400
+                        : Colors.amber.shade700,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openFilterSheet,
+        tooltip: 'Filter',
+        child: const Icon(Icons.filter_list),
+      ),
+    );
+  }
+
+  /// Opens a bottom sheet with filtering options. When the user taps
+  /// “Anwenden”, the filter selections are stored in the state and
+  /// the map markers update accordingly. Sliders and chips are used
+  /// for intuitive selection of distance, price and rating, with a
+  /// toggle for only showing salons with free appointments.
+  void _openFilterSheet() {
+    double tempDistance = _maxDistance;
+    Set<String> tempPriceLevels = {..._selectedPriceLevels};
+    double tempMinRating = _minRating;
+    bool tempOnlyFree = _onlyFree;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: MediaQuery.of(context).viewInsets,
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Filter',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Maximale Entfernung (km): ${tempDistance.toStringAsFixed(1)}'),
+                    Slider(
+                      value: tempDistance,
+                      min: 1,
+                      max: 20,
+                      divisions: 19,
+                      label: tempDistance.toStringAsFixed(1),
+                      onChanged: (value) {
+                        setModalState(() => tempDistance = value);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Preisniveau'),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8.0,
+                      children: ['\$', '\$\$', '\$\$\$'].map((level) {
+                        final isSelected = tempPriceLevels.contains(level);
+                        return FilterChip(
+                          label: Text(level),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setModalState(() {
+                              if (selected) {
+                                tempPriceLevels.add(level);
+                              } else {
+                                tempPriceLevels.remove(level);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Mindestbewertung: ${tempMinRating.toStringAsFixed(1)}'),
+                    Slider(
+                      value: tempMinRating,
+                      min: 0,
+                      max: 5,
+                      divisions: 5,
+                      label: tempMinRating.toStringAsFixed(1),
+                      onChanged: (value) {
+                        setModalState(() => tempMinRating = value);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Nur freie Termine'),
+                      value: tempOnlyFree,
+                      onChanged: (value) {
+                        setModalState(() => tempOnlyFree = value);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _maxDistance = tempDistance;
+                            _selectedPriceLevels = tempPriceLevels;
+                            _minRating = tempMinRating;
+                            _onlyFree = tempOnlyFree;
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Anwenden'),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  /// Displays the details of a selected salon in a bottom sheet. The
+  /// card shows basic information and a call‑to‑action button. In
+  /// keeping with the specification, the card uses the gold accent
+  /// colour and provides a CTA “Jetzt buchen”【522868310347694†L209-L214】.
+  void _showSalonDetails(SalonLocation salon) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        final theme = Theme.of(context);
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    salon.name,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.star, color: Colors.amber.shade600),
+                  const SizedBox(width: 4),
+                  Text(salon.rating.toStringAsFixed(1)),
+                  const SizedBox(width: 16),
+                  const Icon(Icons.attach_money, size: 20),
+                  const SizedBox(width: 2),
+                  Text(salon.priceLevel),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(salon.hasFreeAppointments ? 'Freie Termine verfügbar' : 'Keine freien Termine'),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Salon "${salon.name}" ausgewählt (Demo)')),
+                    );
+                  },
+                  child: const Text('Jetzt buchen'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}

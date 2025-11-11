@@ -33,17 +33,26 @@ class HomePage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              // Map placeholder
-              Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceVariant,
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
-                child: Center(
-                  child: Text(
-                    'Kartenansicht (Placeholder)',
-                    style: theme.textTheme.bodyMedium,
+              // Map placeholder. Tapping this container opens the
+              // interactive map page where users can view salons on
+              // a Leaflet map and apply filters. This satisfies the
+              // requirement to provide a map view in the home module.
+              InkWell(
+                onTap: () {
+                  Navigator.of(context).pushNamed('/salons/map');
+                },
+                borderRadius: BorderRadius.circular(12.0),
+                child: Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceVariant,
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'Karte öffnen',
+                      style: theme.textTheme.bodyMedium,
+                    ),
                   ),
                 ),
               ),
@@ -86,6 +95,19 @@ class HomePage extends StatelessWidget {
                     Navigator.of(context).pushNamed('/salon-list');
                   },
                   child: const Text('Alle Salons anzeigen'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Button to open the user's bookings. This allows customers to
+              // review upcoming and past appointments after completing the
+              // booking flow.
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.of(context).pushNamed('/bookings');
+                  },
+                  child: const Text('Meine Buchungen'),
                 ),
               ),
             ],
