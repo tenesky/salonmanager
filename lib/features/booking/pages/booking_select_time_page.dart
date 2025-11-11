@@ -189,7 +189,9 @@ class _BookingSelectTimePageState extends State<BookingSelectTimePage> {
                   final isSelected = _selectedTime == slot['time'];
                   Color borderColor;
                   Color backgroundColor;
-                  Color textColor;
+                  // Allow the text color to be nullable because the default
+                  // case assigns null to it when the slot is not selected.
+                  Color? textColor;
                   switch (status) {
                     case 'belegt':
                       borderColor = Colors.grey;

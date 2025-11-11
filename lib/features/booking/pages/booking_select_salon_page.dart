@@ -464,12 +464,15 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
           userAgentPackageName: 'com.example.salonmanager',
         ),
         MarkerLayer(
-          markers: salons.map((salon) {
+          // Explicitly type the iterable as List<Marker>. Use the `child` parameter
+          // instead of the deprecated `builder` parameter. This ensures
+          // compatibility with flutter_map >=6.x.
+          markers: salons.map<Marker>((salon) {
             return Marker(
               point: salon['location'] as LatLng,
               width: 40,
               height: 40,
-              builder: (ctx) => GestureDetector(
+              child: GestureDetector(
                 onTap: () => _showMapSalonDetails(salon),
                 child: Icon(
                   Icons.location_on,

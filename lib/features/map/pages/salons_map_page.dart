@@ -126,25 +126,29 @@ class _SalonsMapPageState extends State<SalonsMapPage> {
             subdomains: const ['a', 'b', 'c'],
             userAgentPackageName: 'com.example.salonmanager',
           ),
-          MarkerLayer(
-            markers: _filteredSalons.map((salon) {
-              return Marker(
-                point: salon.location,
-                width: 40,
-                height: 40,
-                builder: (ctx) => GestureDetector(
-                  onTap: () => _showSalonDetails(salon),
-                  child: Icon(
-                    Icons.location_on,
-                    size: 40,
-                    color: theme.brightness == Brightness.dark
-                        ? Colors.amber.shade400
-                        : Colors.amber.shade700,
-                  ),
+        MarkerLayer(
+          // Explicitly type the list to List<Marker> so that Flutter
+          // understands we are returning a list of Marker objects. The
+          // `child` parameter replaces the old `builder` parameter in
+          // newer versions of flutter_map (>=6.x).
+          markers: _filteredSalons.map<Marker>((salon) {
+            return Marker(
+              point: salon.location,
+              width: 40,
+              height: 40,
+              child: GestureDetector(
+                onTap: () => _showSalonDetails(salon),
+                child: Icon(
+                  Icons.location_on,
+                  size: 40,
+                  color: theme.brightness == Brightness.dark
+                      ? Colors.amber.shade400
+                      : Colors.amber.shade700,
                 ),
-              );
-            }).toList(),
-          ),
+              ),
+            );
+          }).toList(),
+        ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
