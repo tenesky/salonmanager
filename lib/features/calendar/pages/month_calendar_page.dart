@@ -59,12 +59,12 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
     final month = now.month;
     // Create random appointments on a few days for demonstration.
     final sampleDates = [3, 5, 7, 10, 12, 18, 21, 25];
-    for (final day in sampleDates) {
-      final date = DateTime(year, month, day);
+    for (final d in sampleDates) {
+      final date = DateTime(year, month, d);
       // Generate a couple of bookings per day.
-      final List<day.Booking> bookings = [];
+      final List<day.Booking> bookingsOnDay = [];
       // first booking at 9:00
-      bookings.add(day.Booking(
+      bookingsOnDay.add(day.Booking(
         id: '${date.day}-1',
         client: 'Kunde ${date.day}A',
         service: 'Service 1',
@@ -73,7 +73,7 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
         duration: 60,
       ));
       // second booking at 13:30
-      bookings.add(day.Booking(
+      bookingsOnDay.add(day.Booking(
         id: '${date.day}-2',
         client: 'Kunde ${date.day}B',
         service: 'Service 2',
@@ -81,7 +81,7 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
         startTime: const TimeOfDay(hour: 13, minute: 30),
         duration: 90,
       ));
-      _bookingsByDate[date] = bookings;
+      _bookingsByDate[date] = bookingsOnDay;
     }
   }
 
@@ -147,7 +147,7 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
                   alignment: Alignment.center,
                   child: Text(
                     weekdayLabels[index],
-                    style: Theme.of(context).textTheme.caption?.copyWith(
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                   ),
@@ -182,7 +182,7 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
                       children: [
                         Text(
                           dayNumber.toString(),
-                          style: Theme.of(context).textTheme.bodyText2,
+                          style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 2),
                         _buildMiniDots(date),
@@ -322,7 +322,8 @@ class DayOverviewSheet extends StatelessWidget {
               children: [
                 Text(
                   'Termine am $dateLabel',
-                  style: Theme.of(context).textTheme.subtitle1?.copyWith(
+                  // Use titleMedium instead of deprecated subtitle1.
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                 ),
@@ -339,7 +340,7 @@ class DayOverviewSheet extends StatelessWidget {
                   padding: const EdgeInsets.all(24.0),
                   child: Text(
                     'Keine Termine an diesem Tag',
-                    style: Theme.of(context).textTheme.bodyText2,
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
               )

@@ -114,7 +114,8 @@ class _CancelBookingsPageState extends State<CancelBookingsPage> {
             // Appointment selection list
             Text(
               'Termine auswählen',
-              style: Theme.of(context).textTheme.headline6,
+              // Use titleLarge for section headings (replaces headline6).
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             if (_appointments.isEmpty)
@@ -141,7 +142,7 @@ class _CancelBookingsPageState extends State<CancelBookingsPage> {
             // Reason selection
             Text(
               'Grund der Absage',
-              style: Theme.of(context).textTheme.headline6,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(

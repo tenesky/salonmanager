@@ -284,7 +284,8 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
                     alignment: Alignment.topRight,
                     child: Text(
                       _formatTime(timeSlots[index]),
-                      style: Theme.of(context).textTheme.caption,
+                      // Use bodySmall instead of deprecated caption.
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   );
                 }),
@@ -324,7 +325,7 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
           ),
           child: Text(
             stylists[stylistIndex],
-            style: Theme.of(context).textTheme.subtitle1,
+            style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
         // Drag target for bookings
@@ -424,20 +425,20 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
         children: [
           Text(
             booking.service,
-            style: Theme.of(context).textTheme.bodyText2?.copyWith(
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                 ),
           ),
           Text(
             booking.client,
-            style: Theme.of(context).textTheme.caption?.copyWith(
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.white,
                 ),
           ),
           Text(
             '${_formatTime(booking.startTime)}  -  ${_formatTime(_addMinutes(booking.startTime, booking.duration))}',
-            style: Theme.of(context).textTheme.overline?.copyWith(
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: Colors.white70,
                 ),
           ),

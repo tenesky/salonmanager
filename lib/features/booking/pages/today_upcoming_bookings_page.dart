@@ -163,7 +163,8 @@ class TodayUpcomingBookingsPage extends StatelessWidget {
             // Section for today's appointments
             Text(
               'Heute',
-              style: Theme.of(context).textTheme.headline6,
+              // Use Material 3 typography: titleLarge replaces headline6.
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             if (today.isEmpty)
@@ -174,7 +175,7 @@ class TodayUpcomingBookingsPage extends StatelessWidget {
             // Section for upcoming appointments
             Text(
               'Nächste Termine',
-              style: Theme.of(context).textTheme.headline6,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             if (upcoming.isEmpty)

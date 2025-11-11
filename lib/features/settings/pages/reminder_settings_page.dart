@@ -45,7 +45,7 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
       _emailEnabled = prefs.getBool('reminder_email_enabled') ?? true;
       final storedUnit = prefs.getString('reminder_unit');
       if (storedUnit == 'hours' || storedUnit == 'days') {
-        _unit = storedUnit;
+        _unit = storedUnit!; // cast to non-null since we check the value above
       }
       final storedValue = prefs.getInt('reminder_value');
       if (storedValue != null && storedValue > 0) {
@@ -88,7 +88,8 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
         children: [
           Text(
             'Zeitpunkt der Erinnerung',
-            style: Theme.of(context).textTheme.headline6,
+            // Use titleLarge instead of deprecated headline6.
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
           Row(
@@ -119,7 +120,8 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
               const SizedBox(width: 16),
               Text(
                 '$_reminderValue ${_unit == 'hours' ? 'Std.' : 'Tage'}',
-                style: Theme.of(context).textTheme.subtitle1,
+                // titleMedium replaces subtitle1 for medium-sized labels.
+                style: Theme.of(context).textTheme.titleMedium,
               ),
             ],
           ),
@@ -138,7 +140,7 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
           const SizedBox(height: 16),
           Text(
             'Kanäle',
-            style: Theme.of(context).textTheme.headline6,
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
           SwitchListTile(
