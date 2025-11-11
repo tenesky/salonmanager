@@ -32,6 +32,31 @@ import 'features/booking/pages/booking_summary_page.dart';
 import 'features/booking/pages/booking_success_page.dart';
 import 'features/booking/pages/bookings_list_page.dart';
 import 'features/booking/pages/booking_detail_page.dart';
+// Import the new incoming bookings page. This page shows pending
+// booking requests for stylists or managers and allows them to
+// accept or decline requests (Screen 28).
+import 'features/booking/pages/incoming_bookings_page.dart';
+import 'features/booking/pages/today_upcoming_bookings_page.dart';
+// Import the cancel bookings page for mass cancellation. This page allows
+// stylists or managers to select multiple appointments, specify a reason
+// (e.g. sickness or overbooking) and send cancellations with a unified
+// notification. It implements Screens 32–33 from the Realisierungsplan【73678961014422†L393-L398】.
+import 'features/booking/pages/cancel_bookings_page.dart';
+// Import the reminder settings page. This page lets stylists and managers
+// configure appointment reminder timings (in hours or days) and enable or
+// disable notification channels (Push/E‑Mail) as described in the
+// Reminder‑Konfiguration specification【73678961014422†L1444-L1447】.
+import 'features/settings/pages/reminder_settings_page.dart';
+// Import service setup page for configuring price and duration per stylist
+// per service. This page shows a matrix of services and stylists with
+// editable cells for price, duration and activation state【73678961014422†L1515-L1519】.
+import 'features/staff/pages/service_setup_page.dart';
+// Import day calendar page for daily schedule. This page displays a timeline
+// with columns per stylist and supports drag‑and‑drop to move bookings,
+// matching Screen 36 of the calendar module【73678961014422†L1528-L1532】.
+import 'features/calendar/pages/day_calendar_page.dart';
+import 'features/calendar/pages/month_calendar_page.dart';
+import 'features/booking/pages/booking_professional_detail_page.dart';
 import 'features/settings/pages/notification_settings_page.dart';
 
 // Import theme
@@ -112,7 +137,53 @@ class MyApp extends StatelessWidget {
             body: Center(child: Text('Keine Details verfügbar.')),
           );
         },
+        // Route for stylists to view and edit booking details. This
+        // professional detail page allows adjusting price/duration per
+        // service, adding notes and uploading images (Screen 30).
+        '/bookings/pro-detail': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return BookingProfessionalDetailPage(booking: args);
+          }
+          return const Scaffold(
+            body: Center(child: Text('Keine Details verfügbar.')),
+          );
+        },
+        // Route to the incoming bookings screen. This route is used by
+        // stylists or managers to review new booking requests and
+        // decide whether to accept or decline them.
+        '/bookings/incoming': (context) => const IncomingBookingsPage(),
+        // Display today's and upcoming bookings for stylists and
+        // managers. This page implements Screen 29 (Heute / Nächste
+        // Termine) with sectioned lists for the current day and
+        // subsequent days.
+        '/bookings/today-next': (context) => TodayUpcomingBookingsPage(),
+        // Route to cancel one or multiple appointments. Stylists or
+        // managers can select several upcoming bookings, choose a reason
+        // and optionally add a custom message before sending a unified
+        // cancellation notification to customers. This implements the
+        // cancellation with reason and mass action described in
+        // Screens 32–33【73678961014422†L393-L398】.
+        '/bookings/cancel': (context) => const CancelBookingsPage(),
         '/settings/notifications': (context) => const NotificationSettingsPage(),
+        // Route to configure reminder timings and channels. This settings
+        // page allows selection of how many hours/days before an
+        // appointment a reminder should be sent and whether Push and
+        // E‑Mail notifications are enabled【73678961014422†L1502-L1505】.
+        '/settings/reminder': (context) => const ReminderSettingsPage(),
+        // Route to the service setup page. This screen presents a matrix
+        // view where managers can configure for each stylist which
+        // services are offered, override price and duration, and activate
+        // or deactivate services【73678961014422†L1515-L1519】.
+        '/staff/service-setup': (context) => const ServiceSetupPage(),
+        // Route to the calendar day view. This screen shows a horizontal
+        // timeline with one column per stylist and supports drag‑&‑drop
+        // rescheduling and a floating action button to create new bookings.
+        '/calendar/day': (context) => const DayCalendarPage(),
+        // Route to the monthly calendar. This screen shows a month grid
+        // with mini‑dots per day to represent appointments per stylist and
+        // opens a modal day view when tapped (Screen 38)【73678961014422†L1528-L1532】.
+        '/calendar/month': (context) => const MonthCalendarPage(),
         // Route used for demo login. Without a backend this simply opens the
         // Home page to allow testing of navigation and UI flows without
         // authentication.

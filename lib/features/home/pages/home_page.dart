@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../../common/themed_background.dart';
 
 /// Home page for customers. This screen shows a simple search field,
@@ -6,8 +9,51 @@ import '../../../common/themed_background.dart';
 /// as the landing page after login and does not require backend
 /// interaction. Navigation to the full salon list is provided at the
 /// bottom.
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+/// State for [HomePage]. This class retrieves the user's current
+/// location (if permission is granted) and displays a small map
+/// preview directly on the home screen. Tapping the map preview
+/// navigates to the full interactive map. The bottom buttons use
+/// custom styles to ensure the text remains legible in dark mode.
+class _HomePageState extends State<HomePage> {
+  LatLng? _userLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserLocation();
+  }
+
+  /// Requests location permissions and obtains the current position
+  /// using the [Geolocator] plugin. If permission is denied or an
+  /// error occurs, the location remains null and the map preview
+  /// defaults to a neutral center.
+  Future<void> _loadUserLocation() async {
+    try {
+      // Request permission if not already granted
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        final newPermission = await Geolocator.requestPermission();
+        if (newPermission == LocationPermission.denied ||
+            newPermission == LocationPermission.deniedForever) {
+          return;
+        }
+      }
+      final position = await Geolocator.getCurrentPosition();
+      setState(() {
+        _userLocation = LatLng(position.latitude, position.longitude);
+      });
+    } catch (e) {
+      // Ignore errors silently; location remains null
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,27 +79,66 @@ class HomePage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              // Map placeholder. Tapping this container opens the
-              // interactive map page where users can view salons on
-              // a Leaflet map and apply filters. This satisfies the
-              // requirement to provide a map view in the home module.
-              InkWell(
-                onTap: () {
-                  Navigator.of(context).pushNamed('/salons/map');
-                },
-                borderRadius: BorderRadius.circular(12.0),
-                child: Container(
-                  height: 200,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceVariant,
-                    borderRadius: BorderRadius.circular(12.0),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'Karte öffnen',
-                      style: theme.textTheme.bodyMedium,
+              // Map preview. Displays a miniature map centered on the
+              // user's location if available. Tapping the preview
+              // navigates to the full map page.
+              Container(
+                height: 200,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceVariant,
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+                child: Stack(
+                  children: [
+                    FlutterMap(
+                      options: MapOptions(
+                        center: _userLocation ?? const LatLng(48.137154, 11.576124),
+                        zoom: 13.0,
+                        interactiveFlags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          subdomains: const ['a', 'b', 'c'],
+                          userAgentPackageName: 'com.example.salonmanager',
+                        ),
+                        if (_userLocation != null)
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: _userLocation!,
+                                width: 40,
+                                height: 40,
+                                child: const Icon(
+                                  Icons.my_location,
+                                  color: Colors.blue,
+                                  size: 32,
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
                     ),
-                  ),
+                    // Transparent overlay to capture taps for
+                    // navigation to the full map page.
+                    Positioned.fill(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12.0),
+                          onTap: () {
+                            Navigator.of(context).pushNamed('/salons/map');
+                          },
+                        ),
+                      ),
+                    ),
+                    // If location is still loading, show a small
+                    // progress indicator in the center.
+                    if (_userLocation == null)
+                      const Center(child: CircularProgressIndicator()),
+                  ],
                 ),
               ),
               const SizedBox(height: 24),
@@ -64,22 +149,22 @@ class HomePage extends StatelessWidget {
               const SizedBox(height: 12),
               // List of recommended salons (static sample data)
               Column(
-                children: [
+                children: const [
                   _SalonCard(
                     name: 'Salon Elegance',
                     distance: '1,2 km',
                     rating: 4.8,
                     priceLevel: '\$\$',
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   _SalonCard(
                     name: 'Hair Couture',
                     distance: '2,5 km',
                     rating: 4.6,
                     priceLevel: '\$\$\$',
                   ),
-                    const SizedBox(height: 12),
-                    _SalonCard(
+                  SizedBox(height: 12),
+                  _SalonCard(
                     name: 'Golden Scissors',
                     distance: '3,0 km',
                     rating: 4.7,
@@ -91,6 +176,10 @@ class HomePage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.colorScheme.onSurface,
+                    side: BorderSide(color: theme.colorScheme.onSurface),
+                  ),
                   onPressed: () {
                     Navigator.of(context).pushNamed('/salon-list');
                   },
@@ -104,6 +193,10 @@ class HomePage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.colorScheme.onSurface,
+                    side: BorderSide(color: theme.colorScheme.onSurface),
+                  ),
                   onPressed: () {
                     Navigator.of(context).pushNamed('/bookings');
                   },

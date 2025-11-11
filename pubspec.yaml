@@ -1,6 +1,7 @@
 name: salonmanager
 description: SalonManager Flutter App – Grundstruktur
-version: 0.1.6
+# Updated version number for database integration. Increment the build number for each release.
+version: 0.1.7
 
 environment:
   sdk: ">=2.17.0 <3.0.0"
@@ -22,6 +23,9 @@ dependencies:
   # Upgrade intl to satisfy the constraint required by flutter_localizations (intl >=0.20.2)
   intl: ^0.20.2
   geolocator: ^9.0.2
+
+  # MySQL driver for Dart/Flutter. Allows direct connection to a MySQL database. Use only in development; consider a secure backend for production.
+  mysql1: ^0.20.0
 
   # Map support using Leaflet. The flutter_map package provides a
   # Flutter implementation of the Leaflet library for interactive

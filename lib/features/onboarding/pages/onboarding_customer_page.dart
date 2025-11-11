@@ -21,7 +21,13 @@ class _OnboardingCustomerPageState extends State<OnboardingCustomerPage> {
   // Lists of available options for each category.  These can be
   // customized or loaded from a remote source.  For the purposes of
   // this demo we provide a few sensible defaults.
-  final List<String> _hairLengthOptions = const ['Kurz', 'Mittel', 'Lang'];
+  /// Hair length options with approximate lengths in centimetres.  These
+  /// labels provide more context for users when selecting their
+  /// preferred hair length. The underlying value stored is the full
+  /// string (e.g. "Kurz (<10cm)") but could be normalised before
+  /// sending to a backend if needed.
+  final List<String> _hairLengthOptions =
+      const ['Kurz (<10cm)', 'Mittel (10–20cm)', 'Lang (>20cm)'];
   final List<String> _styleOptions = const ['Klassisch', 'Modern', 'Trend'];
   final List<String> _colorOptions = const ['Blond', 'Braun', 'Schwarz', 'Rot'];
 
@@ -160,6 +166,9 @@ class _OnboardingCustomerPageState extends State<OnboardingCustomerPage> {
               const SizedBox(height: 16),
               // Optional skip button to allow users to bypass onboarding.
               TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: theme.colorScheme.onSurface,
+                ),
                 onPressed: () => Navigator.of(context).pushReplacementNamed('/home'),
                 child: const Text('Überspringen'),
               ),
