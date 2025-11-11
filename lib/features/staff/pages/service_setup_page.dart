@@ -270,9 +270,18 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                         final double price = cell['price'] as double;
                         final int duration = cell['duration'] as int;
                         final bool active = cell['active'] as bool;
+                        // Build the SQL upsert outside of the query call. If this multi‑line
+                        // literal were passed directly into conn.query it could be parsed
+                        // incorrectly by the Dart compiler, leading to syntax errors during
+                        // the iOS build. Using a local variable ensures the string is
+                        // recognised as a single argument.
+                        const String upsertEmployeeService = '''
+INSERT INTO employee_service (stylist_id, service_id, price, duration, active)
+VALUES (?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE price = VALUES(price), duration = VALUES(duration), active = VALUES(active)
+''';
                         await conn.query(
-                          'INSERT INTO employee_service (stylist_id, service_id, price, duration, active) VALUES (?, ?, ?, ?, ?)
-                          ON DUPLICATE KEY UPDATE price = VALUES(price), duration = VALUES(duration), active = VALUES(active)',
+                          upsertEmployeeService,
                           [stid, sid, price, duration, active ? 1 : 0],
                         );
                       }

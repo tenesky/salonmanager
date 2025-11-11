@@ -5,7 +5,10 @@ import 'package:salonmanager/services/db_service.dart';
 // Reuse the Booking model from the day calendar page to represent
 // appointments in the month view. Import with an alias to avoid name
 // conflicts when building the day overview.
-import 'day_calendar_page.dart' as day;
+// Import the day calendar page with an alias that does not conflict with
+// variable names. Using 'dayCalendar' avoids errors like "'day.Booking' can't
+// be used as a type" when compiling for iOS.
+import 'day_calendar_page.dart' as dayCalendar;
 
 /// A calendar page showing the month overview. Each day cell displays
 /// small coloured dots representing the number of appointments per
@@ -32,7 +35,7 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
   /// A mapping of specific dates to lists of bookings. Each booking
   /// includes start time, duration and assigned stylist index. Bookings
   /// are loaded from the database for the focused month.
-  final Map<DateTime, List<day.Booking>> _bookingsByDate = {};
+  final Map<DateTime, List<dayCalendar.Booking>> _bookingsByDate = {};
 
   /// Indicates whether data is currently loading.
   bool _loading = false;
@@ -97,7 +100,7 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
         ''',
         [startDateStr, endDateStr],
       );
-      final Map<DateTime, List<day.Booking>> grouped = {};
+      final Map<DateTime, List<dayCalendar.Booking>> grouped = {};
       for (final row in bookingRows) {
         // Determine stylist index by matching ID in stylists list.
         final int stylistId = row['stylist_id'];
@@ -115,7 +118,7 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
         final TimeOfDay timeOfDay = TimeOfDay(hour: dt.hour, minute: dt.minute);
         final dayDate = DateTime(dt.year, dt.month, dt.day);
         final String clientName = '${row['firstName']} ${row['lastName']}';
-        final booking = day.Booking(
+        final booking = dayCalendar.Booking(
           id: row['id'].toString(),
           client: clientName,
           service: row['serviceName'],
@@ -293,7 +296,7 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
 
   /// Open a modal bottom sheet showing all bookings for the selected date.
   void _openDayModal(DateTime date) {
-    final List<day.Booking> bookings = _bookingsByDate[date] ?? [];
+    final List<dayCalendar.Booking> bookings = _bookingsByDate[date] ?? [];
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -343,7 +346,7 @@ class DayOverviewSheet extends StatelessWidget {
   }) : super(key: key);
 
   final DateTime date;
-  final List<day.Booking> bookings;
+  final List<dayCalendar.Booking> bookings;
   final List<String> stylists;
   final List<Color> stylistColors;
 
