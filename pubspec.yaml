@@ -1,0 +1,33 @@
+name: salonmanager
+description: SalonManager Flutter App – Grundstruktur
+version: 0.1.0
+
+environment:
+  sdk: ">=2.17.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  riverpod: ^2.0.0
+  go_router: ^6.0.0
+  dio: ^5.0.0
+  flutter_secure_storage: ^5.0.0
+  shared_preferences: ^2.0.0
+  cached_network_image: ^3.2.1
+  file_picker: ^5.0.1
+  image_picker: ^0.8.7
+  url_launcher: ^6.1.6
+  intl: ^0.17.0
+  geolocator: ^9.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
