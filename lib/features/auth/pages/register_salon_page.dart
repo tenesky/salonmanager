@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+// Import AuthService to handle salon owner registration and send 2FA
+import '../../../services/auth_service.dart';
+
 /// Registration screen for new salon owners. This form includes additional
 /// fields to capture salon information. As with the customer registration,
 /// validation is basic and serves as a placeholder until backend integration.
@@ -14,7 +17,7 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _ownerNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  // Password controller is removed; OTP login does not require a password.
   final TextEditingController _salonNameController = TextEditingController();
   final TextEditingController _salonAddressController = TextEditingController();
 
@@ -22,7 +25,6 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
   void dispose() {
     _ownerNameController.dispose();
     _emailController.dispose();
-    _passwordController.dispose();
     _salonNameController.dispose();
     _salonAddressController.dispose();
     super.dispose();
@@ -73,21 +75,8 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
                 },
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Passwort',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.length < 6) {
-                    return 'Das Passwort muss mindestens 6 Zeichen lang sein.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
+              // No password field needed for OTP signup
+              const SizedBox(height: 0),
               TextFormField(
                 controller: _salonNameController,
                 decoration: const InputDecoration(
@@ -113,8 +102,29 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
               ElevatedButton(
                 onPressed: () {
                   if (_formKey.currentState!.validate()) {
-                    // Navigiere nach erfolgreicher Registrierung zum Salon‑Onboarding
-                    Navigator.of(context).pushReplacementNamed('/onboarding-salon');
+                    final ownerName = _ownerNameController.text.trim();
+                    final email = _emailController.text.trim();
+                    final salonName = _salonNameController.text.trim();
+                    final salonAddress = _salonAddressController.text.trim();
+                    // Send an OTP to initiate registration.  Owner data and salon
+                    // details will be stored later via the profile and salons tables.
+                    AuthService()
+                        .sendOtp(email: email)
+                        .then((_) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Bestätigungscode gesendet')),
+                      );
+                      // Navigate to the 2FA screen to verify the code.
+                      Navigator.of(context).pushReplacementNamed('/two-factor', arguments: {
+                        'email': email,
+                      });
+                    }).catchError((err) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Fehler beim Senden des Codes: ${err.toString()}')),
+                      );
+                    });
                   }
                 },
                 // In dunklen Themes soll der Button weiß sein mit schwarzer Schrift.

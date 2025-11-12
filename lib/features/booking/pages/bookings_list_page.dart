@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Import the AuthService to enforce authentication before showing
+// the bookings list.  The relative path climbs three directories
+// (pages → booking → features → lib) to reach lib/services.
+import '../../../services/auth_service.dart';
+
 /// A page that shows a list of the user's bookings.
 ///
 /// Each booking is loaded from local storage and displayed as a
@@ -26,7 +31,7 @@ class _BookingsListPageState extends State<BookingsListPage> {
   @override
   void initState() {
     super.initState();
-    _loadBookings();
+    _checkAuthentication();
   }
 
   Future<void> _loadBookings() async {
@@ -41,6 +46,30 @@ class _BookingsListPageState extends State<BookingsListPage> {
         return bDate.compareTo(aDate);
       });
     });
+  }
+
+  /// Checks whether a user is authenticated before loading bookings.
+  /// If no valid token exists the user is prompted to log in and
+  /// redirected to the login page.  Otherwise the bookings are
+  /// loaded from local storage.
+  Future<void> _checkAuthentication() async {
+    final isLoggedIn = AuthService().isLoggedIn;
+    if (!isLoggedIn) {
+      // Not logged in – show a message and navigate to login.
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bitte anmelden oder registrieren, um Ihre Buchungen zu sehen.'),
+            ),
+          );
+          Navigator.of(context).pushReplacementNamed('/login');
+        });
+      }
+    } else {
+      // Logged in – proceed to load bookings.
+      await _loadBookings();
+    }
   }
 
   /// Parses the combined date and time fields into a DateTime object.

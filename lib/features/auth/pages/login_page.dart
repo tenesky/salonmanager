@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 
+// Import the AuthService for handling login requests.  The service
+// resides in lib/services/auth_service.dart.  The relative import
+// uses three leading ../ segments to navigate from
+// lib/features/auth/pages to lib/services.
+import '../../../services/auth_service.dart';
+
 /// A simple login screen with email and password fields.
 /// Shows inline validation and a hint that 2FA will follow.
 class LoginPage extends StatefulWidget {
@@ -12,29 +18,38 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  bool _obscurePassword = true;
+  // Password is no longer required for Supabase OTP login,
+  // therefore we remove the password controller and state.
 
   @override
   void dispose() {
     _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
   void _togglePasswordVisibility() {
-    setState(() {
-      _obscurePassword = !_obscurePassword;
-    });
+    // No longer needed since we removed the password field.
   }
 
   void _submit() {
     if (_formKey.currentState!.validate()) {
-      // Normally you would call an authentication service here.
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login erfolgreich (Dummy)')),
-      );
-      // TODO: Navigate to next screen or 2FA when implemented.
+      // Collect form values
+      final email = _emailController.text.trim();
+      // Send a one‑time password via Supabase.  If successful, the
+      // user is navigated to the 2FA page to enter the code.
+      AuthService()
+          .sendOtp(email: email)
+          .then((_) {
+        if (!mounted) return;
+        Navigator.of(context).pushNamed('/two-factor', arguments: {
+          'email': email,
+        });
+      }).catchError((err) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler beim Senden des Codes: ${err.toString()}')),
+        );
+      });
     }
   }
 
@@ -73,30 +88,14 @@ class _LoginPageState extends State<LoginPage> {
                   },
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: _passwordController,
-                  decoration: InputDecoration(
-                    labelText: 'Passwort',
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                      ),
-                      onPressed: _togglePasswordVisibility,
-                    ),
+                // Password field removed.  A hint explains the new flow.
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 24),
+                  child: Text(
+                    'Nach Eingabe der E‑Mail wird ein 6‑stelliger Code gesendet.',
+                    textAlign: TextAlign.center,
                   ),
-                  obscureText: _obscurePassword,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Bitte Passwort eingeben';
-                    }
-                    if (value.length < 6) {
-                      return 'Mindestens 6 Zeichen';
-                    }
-                    return null;
-                  },
                 ),
-                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -113,13 +112,15 @@ class _LoginPageState extends State<LoginPage> {
                 // Link to password reset
                 TextButton(
                   onPressed: () {
-                    Navigator.of(context).pushNamed('/forgot-password');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Passwort vergessen ist bei OTP nicht erforderlich')),
+                    );
                   },
                   child: const Text('Passwort vergessen?'),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Zwei-Faktor-Authentifizierung wird nach dem Login benötigt.',
+                  'Ein Code wird per E‑Mail gesendet. Bitte danach eingeben.',
                   style: TextStyle(color: primary.withOpacity(0.7)),
                   textAlign: TextAlign.center,
                 ),

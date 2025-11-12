@@ -32,7 +32,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'Bitte geben Sie Ihre E‑Mail ein. Wir senden Ihnen einen Code zum Zurücksetzen Ihres Passworts.',
+              'Die Anmeldung erfolgt per E‑Mail‑Code. Ein Passwort ist nicht erforderlich. '
+              'Wenn Sie dennoch ein Passwort zurücksetzen möchten, können Sie dies über das Supabase‑Dashboard konfigurieren.',
             ),
             const SizedBox(height: 16),
             TextField(
@@ -45,14 +46,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () {
-                // TODO: call backend to send reset code
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Code gesendet (Demo).')),
-                );
-                Navigator.of(context).pushNamed('/reset-password');
-              },
-              child: const Text('Code senden'),
+              onPressed: null,
+              child: const Text('Zurücksetzen nicht verfügbar'),
             ),
             const SizedBox(height: 16),
             TextButton(

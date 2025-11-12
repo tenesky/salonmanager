@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+// Import the AuthService to verify the two‑factor code.  We use
+// a relative import to access lib/services/auth_service.dart.
+import '../../../services/auth_service.dart';
+
 /// A page that prompts the user to enter their two‑factor authentication
 /// code. This UI is kept simple with a single input field and actions to
 /// resend the code or use a recovery link. In a real application the
@@ -13,6 +17,24 @@ class TwoFactorPage extends StatefulWidget {
 
 class _TwoFactorPageState extends State<TwoFactorPage> {
   final TextEditingController _codeController = TextEditingController();
+
+  // The e‑mail address for which the 2FA code was generated.  This
+  // value is passed via the Navigator arguments when the user
+  // navigates from the login page.  We assign it in
+  // didChangeDependencies() once.
+  String? _email;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Extract the e‑mail argument only once
+    if (_email == null) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map && args.containsKey('email')) {
+        _email = args['email'] as String?;
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -72,10 +94,39 @@ class _TwoFactorPageState extends State<TwoFactorPage> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  // In a real app the code would be validated here
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Eingegebener Code: ${_codeController.text}')),
-                  );
+                  // Validate the input and verify the code via Supabase.
+                  final code = _codeController.text.trim();
+                  if (code.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Bitte Code eingeben')),
+                    );
+                    return;
+                  }
+                  final email = _email;
+                  if (email == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Unbekannte E‑Mail-Adresse. Bitte erneut einloggen.')),
+                    );
+                    Navigator.of(context).pop();
+                    return;
+                  }
+                  AuthService()
+                      .verifyOtp(email: email, code: code)
+                      .then((success) {
+                    if (!mounted) return;
+                    if (success) {
+                      Navigator.of(context).pushReplacementNamed('/home');
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Code ungültig')),
+                      );
+                    }
+                  }).catchError((err) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Fehler bei der Verifikation: ${err.toString()}')),
+                    );
+                  });
                 },
                 child: const Text('Weiter'),
               ),

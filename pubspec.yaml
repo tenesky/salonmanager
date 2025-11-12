@@ -1,7 +1,7 @@
 name: salonmanager
 description: SalonManager Flutter App – Grundstruktur
 # Updated version number for database integration. Increment the build number for each release.
-version: 0.1.8
+version: 0.1.9
 
 environment:
   sdk: ">=2.17.0 <3.0.0"
@@ -32,6 +32,11 @@ dependencies:
   # maps. latlong2 supplies classes for geographic coordinates.
   flutter_map: ^6.0.0
   latlong2: ^0.9.0
+
+  # Supabase client for Flutter. Provides authentication, database
+  # access and realtime support. Use this to replace the custom
+  # backend for authentication.
+  supabase_flutter: ^2.5.0
 
 dev_dependencies:
   flutter_test:

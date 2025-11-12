@@ -3,6 +3,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Import AuthService to enforce login before starting the booking wizard.
+import '../../../services/auth_service.dart';
+
 /// First step of the booking wizard: select a salon. This screen
 /// provides a search bar, filter chips (Distanz, Preis, Bewertung)
 /// and a toggle for „nur freie Termine“. Users can switch between
@@ -364,9 +367,21 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
         child: ElevatedButton(
           onPressed: _selectedSalonId != null
               ? () {
-                  // Navigate to the next step of the booking wizard. For
-                  // now this is a placeholder route.
-                  Navigator.of(context).pushNamed('/booking/select-service');
+                  // Before proceeding, check whether the user is logged in.
+                  final isLoggedIn = AuthService().isLoggedIn;
+                  if (isLoggedIn) {
+                    // The user is authenticated; proceed to the next step.
+                    Navigator.of(context).pushNamed('/booking/select-service');
+                  } else {
+                    // Not logged in – prompt the user and redirect to login.
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Bitte anmelden oder registrieren, um eine Buchung zu starten.'),
+                      ),
+                    );
+                    Navigator.of(context).pushNamed('/login');
+                  }
                 }
               : null,
           child: const Text('Weiter'),
