@@ -1,7 +1,7 @@
 name: salonmanager
 description: SalonManager Flutter App – Grundstruktur
 # Updated version number for database integration. Increment the build number for each release.
-version: 0.2.1
+version: 0.2.2
 
 environment:
   sdk: ">=2.17.0 <3.0.0"
@@ -27,12 +27,10 @@ dependencies:
 
   # Supabase client for Flutter. Provides authentication, realtime database
   # and Postgres access without needing a custom backend. Used for email
-  # OTP login and session handling.
-  # Update Supabase SDK to the latest minor release for new features and bug fixes.
+  # OTP login and session handling. This package replaces the previous
+  # mysql1 dependency for data access. All database queries should
+  # leverage Supabase's PostgREST API via this client.
   supabase_flutter: ^2.5.0
-
-  # MySQL driver for Dart/Flutter. Allows direct connection to a MySQL database. Use only in development; consider a secure backend for production.
-  mysql1: ^0.20.0
 
   # Map support using Leaflet. The flutter_map package provides a
   # Flutter implementation of the Leaflet library for interactive

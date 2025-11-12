@@ -4,6 +4,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../common/themed_background.dart';
 import '../../../services/auth_service.dart';
+import '../../../services/db_service.dart';
+import '../../salon/models/salon.dart';
 
 /// Home page for customers. This screen shows a simple search field,
 /// a placeholder map section and a few recommended salons. It serves
@@ -24,11 +26,15 @@ class HomePage extends StatefulWidget {
 /// custom styles to ensure the text remains legible in dark mode.
 class _HomePageState extends State<HomePage> {
   LatLng? _userLocation;
+  final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _salons = [];
+  List<Marker> _salonMarkers = [];
 
   @override
   void initState() {
     super.initState();
     _loadUserLocation();
+    _loadSalons(); // load initial salon list
   }
 
   /// Requests location permissions and obtains the current position
@@ -56,6 +62,43 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  /// Loads salons from Supabase and updates the list and markers.
+  Future<void> _loadSalons() async {
+    try {
+      final salons = await DbService.getSalons(
+        searchQuery: _searchController.text.trim().isEmpty
+            ? null
+            : _searchController.text.trim(),
+      );
+      // Build markers for the mini map
+      final List<Marker> markers = [];
+      for (final s in salons) {
+        final lat = s['latitude'] as double?;
+        final lng = s['longitude'] as double?;
+        if (lat != null && lng != null) {
+          markers.add(
+            Marker(
+              point: LatLng(lat, lng),
+              width: 40,
+              height: 40,
+              child: const Icon(
+                Icons.location_pin,
+                color: Colors.orange,
+                size: 32,
+              ),
+            ),
+          );
+        }
+      }
+      setState(() {
+        _salons = salons;
+        _salonMarkers = markers;
+      });
+    } catch (_) {
+      // ignore errors silently
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -71,6 +114,7 @@ class _HomePageState extends State<HomePage> {
             children: [
               // Search field
               TextField(
+                controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Salons suchen...',
                   prefixIcon: const Icon(Icons.search),
@@ -78,6 +122,9 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(8.0),
                   ),
                 ),
+                onChanged: (_) {
+                  _loadSalons();
+                },
               ),
               const SizedBox(height: 16),
               // Map preview. Displays a miniature map centered on the
@@ -120,6 +167,9 @@ class _HomePageState extends State<HomePage> {
                               ),
                             ],
                           ),
+                        // markers for salons
+                        if (_salonMarkers.isNotEmpty)
+                          MarkerLayer(markers: _salonMarkers),
                       ],
                     ),
                     // Transparent overlay to capture taps for
@@ -148,29 +198,33 @@ class _HomePageState extends State<HomePage> {
                 style: theme.textTheme.titleMedium,
               ),
               const SizedBox(height: 12),
-              // List of recommended salons (static sample data)
+              // Dynamic list of recommended salons. Shows up to three salons
+              // sorted by rating. If no salons are available, display a
+              // message. Each card navigates to the salon detail page.
               Column(
-                children: const [
-                  _SalonCard(
-                    name: 'Salon Elegance',
-                    distance: '1,2 km',
-                    rating: 4.8,
-                    priceLevel: '\$\$',
-                  ),
-                  SizedBox(height: 12),
-                  _SalonCard(
-                    name: 'Hair Couture',
-                    distance: '2,5 km',
-                    rating: 4.6,
-                    priceLevel: '\$\$\$',
-                  ),
-                  SizedBox(height: 12),
-                  _SalonCard(
-                    name: 'Golden Scissors',
-                    distance: '3,0 km',
-                    rating: 4.7,
-                    priceLevel: '\$\$',
-                  ),
+                children: [
+                  if (_salons.isEmpty)
+                    const Text('Keine Salons gefunden'),
+                  for (var i = 0; i < (_salons.length < 3 ? _salons.length : 3); i++) ...[
+                    _SalonCard(
+                      name: _salons[i]['name'] as String? ?? '',
+                      distance: '',
+                      rating: (_salons[i]['rating'] as num?)?.toDouble() ?? 0.0,
+                      priceLevel: _salons[i]['price_level'] as String? ?? '',
+                      onTap: () {
+                        final salon = Salon(
+                          name: _salons[i]['name'] as String? ?? '',
+                          coverImage: 'assets/background_dark.png',
+                          logoImage: 'assets/logo_full.png',
+                          address: 'Adresse nicht verfügbar',
+                          openingHours: '',
+                          phone: '',
+                        );
+                        Navigator.pushNamed(context, '/salon-detail', arguments: salon);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                 ],
               ),
               const SizedBox(height: 24),
@@ -205,7 +259,7 @@ class _HomePageState extends State<HomePage> {
                     if (!AuthService.isLoggedIn()) {
                       Navigator.of(context).pushNamed('/login');
                     } else {
-                      Navigator.of(context).pushNamed('/bookings');
+                      Navigator.of(context).pushNamed('/profile/bookings');
                     }
                   },
                   child: const Text('Meine Buchungen'),
@@ -227,12 +281,14 @@ class _SalonCard extends StatelessWidget {
   final String distance;
   final double rating;
   final String priceLevel;
+  final VoidCallback? onTap;
 
   const _SalonCard({
     required this.name,
     required this.distance,
     required this.rating,
     required this.priceLevel,
+    this.onTap,
   });
 
   @override
@@ -260,10 +316,13 @@ class _SalonCard extends StatelessWidget {
           ],
         ),
         onTap: () {
-          // In a full implementation, this would open the salon detail
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Salon "$name" ausgewählt (Demo)')),
-          );
+          if (onTap != null) {
+            onTap!();
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Salon "$name" ausgewählt (Demo)')),
+            );
+          }
         },
       ),
     );

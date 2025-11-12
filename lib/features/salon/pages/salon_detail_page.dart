@@ -84,8 +84,14 @@ class _SalonDetailPageState extends State<SalonDetailPage> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _openQuickBooking,
-                      child: const Text('Schnell buchen'),
+                      // Start the booking wizard directly. We begin at the
+                      // salon selection step so the user can confirm or change
+                      // their selection. In a future iteration this could
+                      // pre‑select the current salon and skip that step.
+                      onPressed: () {
+                        Navigator.of(context).pushNamed('/booking/select-salon');
+                      },
+                      child: const Text('Jetzt buchen'),
                     ),
                   ),
                 ],
@@ -103,137 +109,8 @@ class _SalonDetailPageState extends State<SalonDetailPage> {
   /// the booking process. This implements the mini‑calendar and
   /// timeslot picker required for Screen 14. For now the wizard page
   /// is a placeholder.
-  void _openQuickBooking() {
-    // Set up local variables to persist selection state inside the
-    // bottom sheet. They are defined outside the builder so they
-    // persist across rebuilds triggered by setModalState.
-    int selectedDayIndex = -1;
-    int selectedTimeIndex = -1;
-    // Generate a list of 7 dates starting from today
-    final today = DateTime.now();
-    final days = List<DateTime>.generate(7, (i) => today.add(Duration(days: i)));
-    // Define sample time slots
-    final times = [
-      '09:00', '09:30', '10:00', '10:30', '11:00', '13:00', '14:00', '15:30', '17:00'
-    ];
-    // Helper to format dates for chips
-    String formatDate(DateTime date) {
-      const weekdayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-      final day = weekdayNames[date.weekday - 1];
-      final month = date.month.toString().padLeft(2, '0');
-      final dayNum = date.day.toString().padLeft(2, '0');
-      return '$day $dayNum.$month';
-    }
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 16,
-                right: 16,
-                top: 16,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Schnell buchen',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // Mini calendar (horizontal list of ChoiceChips)
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: List.generate(days.length, (index) {
-                        final date = days[index];
-                        final isSelected = selectedDayIndex == index;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: ChoiceChip(
-                            label: Text(formatDate(date)),
-                            selected: isSelected,
-                            onSelected: (selected) {
-                              setModalState(() {
-                                if (selected) {
-                                  selectedDayIndex = index;
-                                } else {
-                                  selectedDayIndex = -1;
-                                }
-                                // Reset time selection when day changes
-                                selectedTimeIndex = -1;
-                              });
-                            },
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (selectedDayIndex >= 0) ...[
-                    const Text(
-                      'Zeit auswählen',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: List.generate(times.length, (i) {
-                        final isSelected = selectedTimeIndex == i;
-                        return ChoiceChip(
-                          label: Text(times[i]),
-                          selected: isSelected,
-                          onSelected: (selected) {
-                            setModalState(() {
-                              if (selected) {
-                                selectedTimeIndex = i;
-                              } else {
-                                selectedTimeIndex = -1;
-                              }
-                            });
-                          },
-                        );
-                      }),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: (selectedDayIndex >= 0 && selectedTimeIndex >= 0)
-                          ? () {
-                              Navigator.pop(context);
-                              Navigator.of(context).pushNamed('/booking/select-salon');
-                            }
-                          : null,
-                      child: const Text('Zum Booking‑Wizard'),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
+  // The quick booking bottom sheet has been removed. Booking now always starts
+  // at the full booking wizard (salon selection). This stub remains for
+  // compatibility but does nothing.
+  void _openQuickBooking() {}
 }

@@ -56,50 +56,17 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
       _loading = true;
     });
     try {
-      final conn = await DbService.getConnection();
-      final results = await conn.query(
-        '''
-        SELECT b.id, b.start_datetime AS startDateTime, b.duration AS bookingDuration, b.price AS bookingPrice,
-               b.notes AS bookingNotes, b.status,
-               c.first_name AS customerFirstName, c.last_name AS customerLastName,
-               st.name AS stylistName,
-               srv.id AS serviceId, srv.name AS serviceName
-        FROM bookings b
-        JOIN customers c ON b.customer_id = c.id
-        JOIN stylists st ON b.stylist_id = st.id
-        JOIN services srv ON b.service_id = srv.id
-        WHERE b.id = ?
-        ''',
-        [widget.bookingId],
-      );
-      if (results.isNotEmpty) {
-        final row = results.first;
-        DateTime dt;
-        final dynamic v = row['startDateTime'];
-        if (v is DateTime) {
-          dt = v.toLocal();
-        } else if (v is String) {
-          dt = DateTime.parse(v).toLocal();
-        } else {
-          dt = DateTime.now();
-        }
+      final detail = await DbService.getBookingDetail(widget.bookingId);
+      if (detail != null) {
         _bookingInfo = {
-          'customerName': '${row['customerFirstName']} ${row['customerLastName']}',
-          'stylistName': row['stylistName'],
-          'date': '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year}',
-          'time': '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}',
+          'customerName': detail['customerName'],
+          'stylistName': detail['stylistName'],
+          'date': detail['date'],
+          'time': detail['time'],
         };
-        _services = [
-          {
-            'serviceId': row['serviceId'],
-            'name': row['serviceName'],
-            'price': row['bookingPrice'],
-            'duration': row['bookingDuration'],
-          }
-        ];
-        _notesController.text = row['bookingNotes']?.toString() ?? '';
+        _services = List<Map<String, dynamic>>.from(detail['services'] as List);
+        _notesController.text = detail['notes']?.toString() ?? '';
       }
-      await conn.close();
     } catch (_) {
       // ignore errors
     }
@@ -153,12 +120,10 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
                   });
                   // Persist the changes to the database.
                   try {
-                    final conn = await DbService.getConnection();
-                    await conn.query(
-                      'UPDATE bookings SET price = ?, duration = ? WHERE id = ?',
-                      [newPrice, newDuration, widget.bookingId],
-                    );
-                    await conn.close();
+                    await DbService.updateBookingPriceDuration(
+                        bookingId: widget.bookingId,
+                        price: newPrice,
+                        duration: newDuration);
                   } catch (_) {
                     // ignore errors
                   }
@@ -200,12 +165,10 @@ class _BookingProfessionalDetailPageState extends State<BookingProfessionalDetai
   Future<void> _saveNotes() async {
     final String notes = _notesController.text;
     try {
-      final conn = await DbService.getConnection();
-      await conn.query(
-        'UPDATE bookings SET notes = ? WHERE id = ?',
-        [notes, widget.bookingId],
+      await DbService.updateBookingNotes(
+        bookingId: widget.bookingId,
+        notes: notes,
       );
-      await conn.close();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Notizen gespeichert.')),
       );

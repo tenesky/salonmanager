@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../services/db_service.dart';
 
 /// Second step of the booking wizard: select a service. This screen
 /// presents the available services grouped into tabs for Damen,
@@ -17,90 +18,30 @@ class BookingSelectServicePage extends StatefulWidget {
 
 class _BookingSelectServicePageState extends State<BookingSelectServicePage>
     with SingleTickerProviderStateMixin {
-  // Sample data for services. Each entry has an id, title, price
-  // range, duration, detailed description and the category it
-  // belongs to. In a real app this would be fetched from the backend
-  // based on the selected salon.
-  final List<Map<String, String>> _services = [
-    {
-      'id': 'd1',
-      'category': 'Damen',
-      'title': 'Damenhaarschnitt',
-      'price': '€40–€60',
-      'duration': '60 min',
-      'description':
-          'Ein klassischer Damenhaarschnitt inklusive Waschen, Schneiden und Styling. Geeignet für alle Haarlängen.',
-    },
-    {
-      'id': 'd2',
-      'category': 'Damen',
-      'title': 'Färben & Strähnen',
-      'price': '€70–€120',
-      'duration': '90 min',
-      'description':
-          'Farbbehandlung mit individueller Beratung. Inklusive Pflegespülung und Styling.',
-    },
-    {
-      'id': 'h1',
-      'category': 'Herren',
-      'title': 'Herrenhaarschnitt',
-      'price': '€25–€40',
-      'duration': '30 min',
-      'description': 'Modischer Herrenhaarschnitt inklusive Waschen und Styling.',
-    },
-    {
-      'id': 'h2',
-      'category': 'Herren',
-      'title': 'Rasur & Bartpflege',
-      'price': '€20–€35',
-      'duration': '30 min',
-      'description': 'Klassische Nassrasur oder Konturenrasur inklusive Pflege.',
-    },
-    {
-      'id': 'b1',
-      'category': 'Bart',
-      'title': 'Barttrimmen',
-      'price': '€15–€25',
-      'duration': '20 min',
-      'description': 'Professionelles Barttrimmen für eine gepflegte Form.',
-    },
-    {
-      'id': 'b2',
-      'category': 'Bart',
-      'title': 'Vollbartpflege',
-      'price': '€25–€40',
-      'duration': '30 min',
-      'description':
-          'Umfassende Bartpflege inklusive Waschen, Schneiden und Pflegeprodukte.',
-    },
-    {
-      'id': 's1',
-      'category': 'Spezial',
-      'title': 'Balayage',
-      'price': '€120–€180',
-      'duration': '120 min',
-      'description':
-          'Sanfte Farbverläufe für einen natürlichen Look. Inklusive Beratung und Pflege.',
-    },
-    {
-      'id': 's2',
-      'category': 'Spezial',
-      'title': 'Keratin‑Behandlung',
-      'price': '€150–€200',
-      'duration': '150 min',
-      'description':
-          'Glättet und pflegt das Haar mit Keratin. Langanhaltendes Ergebnis.',
-    },
-  ];
+  /// All services loaded from Supabase. Each map contains keys:
+  /// `id` (int), `name` (String), `duration` (int minutes), `price`
+  /// (num), `description` (String?), and `category` (String?).
+  List<Map<String, dynamic>> _services = [];
+
+  /// Services grouped by category for quick lookup. Keys are
+  /// category names and values are lists of services.
+  final Map<String, List<Map<String, dynamic>>> _servicesByCategory = {};
+
+  /// Selected service IDs (as strings) for multi‑selection.
+  Set<String> _selectedServiceIds = {};
+
+  /// Categories for the TabBar. Even if a category has no services
+  /// it will still appear to indicate that none are available.
+  final List<String> _categories = ['Damen', 'Herren', 'Bart', 'Spezial'];
 
   late TabController _tabController;
-  String? _selectedServiceId;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-    _loadDraftServiceId();
+    _tabController = TabController(length: _categories.length, vsync: this);
+    _loadDraftSelectedServices();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadServices());
   }
 
   @override
@@ -109,50 +50,100 @@ class _BookingSelectServicePageState extends State<BookingSelectServicePage>
     super.dispose();
   }
 
-  /// Loads a previously selected service ID from shared preferences if
-  /// available. This ensures the user’s selection persists across
-  /// sessions.
-  Future<void> _loadDraftServiceId() async {
+  /// Loads previously selected service IDs from shared preferences. This
+  /// ensures the user’s selections persist across sessions.
+  Future<void> _loadDraftSelectedServices() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _selectedServiceId = prefs.getString('draft_service_id');
-    });
-  }
-
-  /// Saves the selected service ID to shared preferences and updates
-  /// state. Also shows a short confirmation message.
-  Future<void> _selectService(String id) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('draft_service_id', id);
-    setState(() {
-      _selectedServiceId = id;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Service ausgewählt')),
-    );
-  }
-
-  /// Returns the list of services filtered by the current tab
-  /// selection. The TabBar index corresponds to the category order
-  /// defined below.
-  List<Map<String, String>> _servicesForTab(int index) {
-    String category;
-    switch (index) {
-      case 0:
-        category = 'Damen';
-        break;
-      case 1:
-        category = 'Herren';
-        break;
-      case 2:
-        category = 'Bart';
-        break;
-      default:
-        category = 'Spezial';
+    final ids = prefs.getStringList('draft_service_ids');
+    if (ids != null) {
+      setState(() {
+        _selectedServiceIds = ids.toSet();
+      });
     }
-    return _services
-        .where((service) => service['category'] == category)
-        .toList();
+  }
+
+  /// Persists the current selection of service IDs to shared
+  /// preferences. Called whenever the selection changes.
+  Future<void> _saveSelectedServices() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('draft_service_ids', _selectedServiceIds.toList());
+  }
+
+  /// Loads available services from Supabase and groups them by
+  /// category. Errors are ignored for now. The `category` field on
+  /// the service record may be null; such services are placed into
+  /// the "Spezial" category.
+  Future<void> _loadServices() async {
+    try {
+      final services = await DbService.getServices();
+      // Group services by category
+      final Map<String, List<Map<String, dynamic>>> grouped = {
+        for (final c in _categories) c: []
+      };
+      for (final s in services) {
+        final String category = (s['category'] as String?) ?? 'Spezial';
+        if (!grouped.containsKey(category)) {
+          grouped[category] = [];
+        }
+        grouped[category]!.add(s);
+      }
+      setState(() {
+        _services = services;
+        _servicesByCategory
+          ..clear()
+          ..addAll(grouped);
+      });
+    } catch (_) {
+      // In case of an error the lists remain empty.
+    }
+  }
+
+  /// Toggles a service selection. If the service ID is already
+  /// selected it will be removed, otherwise it is added. After
+  /// updating the selection the new list is saved to shared
+  /// preferences.
+  Future<void> _toggleService(String id) async {
+    setState(() {
+      if (_selectedServiceIds.contains(id)) {
+        _selectedServiceIds.remove(id);
+      } else {
+        _selectedServiceIds.add(id);
+      }
+    });
+    await _saveSelectedServices();
+  }
+
+  /// Returns the list of services for the given tab index. Uses
+  /// [_categories] and [_servicesByCategory].
+  List<Map<String, dynamic>> _servicesForTab(int index) {
+    final category = _categories[index];
+    return _servicesByCategory[category] ?? [];
+  }
+
+  /// Calculates the total price (double) and total duration (minutes)
+  /// of the currently selected services. The returned map has keys
+  /// `price` and `duration`. If no services are selected, both
+  /// values are zero.
+  Map<String, num> _calculateTotals() {
+    double priceSum = 0;
+    int durationSum = 0;
+    for (final id in _selectedServiceIds) {
+      final svc = _services.firstWhere(
+        (e) => e['id'].toString() == id,
+        orElse: () => {},
+      );
+      if (svc.isNotEmpty) {
+        final priceVal = svc['price'];
+        if (priceVal is num) {
+          priceSum += priceVal.toDouble();
+        }
+        final durationVal = svc['duration'];
+        if (durationVal is int) {
+          durationSum += durationVal;
+        }
+      }
+    }
+    return {'price': priceSum, 'duration': durationSum};
   }
 
   @override
@@ -164,12 +155,7 @@ class _BookingSelectServicePageState extends State<BookingSelectServicePage>
           preferredSize: const Size.fromHeight(48),
           child: TabBar(
             controller: _tabController,
-            tabs: const [
-              Tab(text: 'Damen'),
-              Tab(text: 'Herren'),
-              Tab(text: 'Bart'),
-              Tab(text: 'Spezial'),
-            ],
+            tabs: _categories.map((c) => Tab(text: c)).toList(),
           ),
         ),
       ),
@@ -195,7 +181,7 @@ class _BookingSelectServicePageState extends State<BookingSelectServicePage>
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: List.generate(4, (index) {
+              children: List.generate(_categories.length, (index) {
                 final services = _servicesForTab(index);
                 if (services.isEmpty) {
                   return const Center(
@@ -208,12 +194,27 @@ class _BookingSelectServicePageState extends State<BookingSelectServicePage>
                   separatorBuilder: (context, i) => const SizedBox(height: 12),
                   itemBuilder: (context, i) {
                     final service = services[i];
-                    final bool selected = service['id'] == _selectedServiceId;
+                    final bool isSelected = _selectedServiceIds.contains(service['id'].toString());
+                    // Format price and duration for subtitle
+                    String priceStr;
+                    final priceVal = service['price'];
+                    if (priceVal is num) {
+                      priceStr = '€${priceVal.toStringAsFixed(2)}';
+                    } else {
+                      priceStr = priceVal?.toString() ?? '';
+                    }
+                    String durationStr;
+                    final durVal = service['duration'];
+                    if (durVal is int) {
+                      durationStr = '${durVal} min';
+                    } else {
+                      durationStr = durVal?.toString() ?? '';
+                    }
                     return Card(
                       child: ListTile(
-                        title: Text(service['title']!),
-                        subtitle: Text('${service['price']} • ${service['duration']}'),
-                        trailing: selected
+                        title: Text(service['name']?.toString() ?? ''),
+                        subtitle: Text('$priceStr • $durationStr'),
+                        trailing: isSelected
                             ? Icon(Icons.check_circle,
                                 color: Theme.of(context).colorScheme.primary)
                             : null,
@@ -232,13 +233,34 @@ class _BookingSelectServicePageState extends State<BookingSelectServicePage>
       // Continue button. Enabled only if a service is selected.
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: ElevatedButton(
-          onPressed: _selectedServiceId != null
-              ? () {
-                  Navigator.of(context).pushNamed('/booking/select-stylist');
-                }
-              : null,
-          child: const Text('Weiter'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Summary of selected services (price and duration)
+            Builder(builder: (context) {
+              final totals = _calculateTotals();
+              final double price = totals['price'] as double;
+              final int duration = totals['duration'] as int;
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Gesamt: €${price.toStringAsFixed(2)}',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                  Text('Dauer: ${duration} min',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              );
+            }),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: _selectedServiceIds.isNotEmpty
+                  ? () {
+                      Navigator.of(context).pushNamed('/booking/select-stylist');
+                    }
+                  : null,
+              child: const Text('Weiter'),
+            ),
+          ],
         ),
       ),
     );
@@ -248,7 +270,7 @@ class _BookingSelectServicePageState extends State<BookingSelectServicePage>
   /// service. Includes a button to choose the service which stores
   /// the service ID and closes the sheet. This replicates the
   /// behavior described for the service cards【522868310347694†L128-L136】.
-  void _showServiceDetails(Map<String, String> service) {
+  void _showServiceDetails(Map<String, dynamic> service) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -265,7 +287,7 @@ class _BookingSelectServicePageState extends State<BookingSelectServicePage>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    service['title']!,
+                    service['name']?.toString() ?? '',
                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   IconButton(
@@ -275,19 +297,37 @@ class _BookingSelectServicePageState extends State<BookingSelectServicePage>
                 ],
               ),
               const SizedBox(height: 8),
-              Text(service['description'] ?? ''),
+              Text(service['description']?.toString() ?? ''),
               const SizedBox(height: 16),
-              Text('Preis: ${service['price']}'),
-              Text('Dauer: ${service['duration']}'),
+              // Display formatted price and duration
+              Builder(builder: (context) {
+                final priceVal = service['price'];
+                final priceStr = (priceVal is num)
+                    ? '€${priceVal.toStringAsFixed(2)}'
+                    : priceVal?.toString() ?? '';
+                final durVal = service['duration'];
+                final durationStr = (durVal is int)
+                    ? '${durVal} min'
+                    : durVal?.toString() ?? '';
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Preis: $priceStr'),
+                    Text('Dauer: $durationStr'),
+                  ],
+                );
+              }),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    _selectService(service['id']!);
+                    _toggleService(service['id'].toString());
                   },
-                  child: const Text('Service auswählen'),
+                  child: Text(_selectedServiceIds.contains(service['id'].toString())
+                      ? 'Service abwählen'
+                      : 'Service auswählen'),
                 ),
               ),
             ],

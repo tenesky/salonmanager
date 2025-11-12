@@ -151,7 +151,8 @@ class WelcomePage extends StatelessWidget {
                 children: [
                   GestureDetector(
                     onTap: () {
-                      // TODO: navigate to impressum page when implemented
+                      // Navigate to the Impressum page when tapped
+                      Navigator.of(context).pushNamed('/impressum');
                     },
                     child: Text(
                       'Impressum',

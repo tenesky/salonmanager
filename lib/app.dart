@@ -51,6 +51,10 @@ import 'features/settings/pages/reminder_settings_page.dart';
 // per service. This page shows a matrix of services and stylists with
 // editable cells for price, duration and activation state【73678961014422†L1515-L1519】.
 import 'features/staff/pages/service_setup_page.dart';
+import 'features/staff/pages/assign_services_page.dart';
+import 'features/customer/pages/customer_list_page.dart';
+import 'features/customer/pages/customer_profile_page.dart';
+import 'features/settings/pages/impressum_page.dart';
 // Import day calendar page for daily schedule. This page displays a timeline
 // with columns per stylist and supports drag‑and‑drop to move bookings,
 // matching Screen 36 of the calendar module【73678961014422†L1528-L1532】.
@@ -65,6 +69,13 @@ import 'features/schedule/pages/board_page.dart';
 // request shift swaps with colleagues and managers to review
 // requests.
 import 'features/schedule/pages/swap_page.dart';
+// Import the leave management page. This page provides a calendar view
+// for selecting vacation days and lists all leave requests with
+// approval controls.
+import 'features/schedule/pages/leave_page.dart';
+// Import the timesheet page. This page provides start/stop tracking
+// buttons and lists recorded time blocks grouped by day.
+import 'features/schedule/pages/timesheet_page.dart';
 import 'features/booking/pages/booking_professional_detail_page.dart';
 import 'features/settings/pages/notification_settings_page.dart';
 
@@ -135,12 +146,31 @@ class MyApp extends StatelessWidget {
         '/booking/additional-info': (context) => const BookingAdditionalInfoPage(),
         '/booking/payment': (context) => const BookingPaymentPage(),
         '/booking/summary': (context) => const BookingSummaryPage(),
-        '/booking/success': (context) => const BookingSuccessPage(),
-        '/bookings': (context) => const BookingsListPage(),
+        '/booking/success': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          int? bookingId;
+          if (args is int) {
+            bookingId = args;
+          }
+          return BookingSuccessPage(bookingId: bookingId);
+        },
+        '/profile/bookings': (context) => const BookingsListPage(),
         '/bookings/detail': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
+          // If args is a map, decide whether to pass id or full booking
           if (args is Map<String, dynamic>) {
+            if (args.containsKey('id')) {
+              final idVal = args['id'];
+              if (idVal is int) {
+                return BookingDetailPage(bookingId: idVal);
+              }
+            }
+            // treat as a full booking map
             return BookingDetailPage(booking: args);
+          }
+          // If args is a simple integer, treat as booking id
+          if (args is int) {
+            return BookingDetailPage(bookingId: args);
           }
           return const Scaffold(
             body: Center(child: Text('Keine Details verfügbar.')),
@@ -182,11 +212,37 @@ class MyApp extends StatelessWidget {
         // appointment a reminder should be sent and whether Push and
         // E‑Mail notifications are enabled【73678961014422†L1502-L1505】.
         '/settings/reminder': (context) => const ReminderSettingsPage(),
+        // Legal notice page. Displays company information required by law.
+        '/impressum': (context) => const ImpressumPage(),
         // Route to the service setup page. This screen presents a matrix
         // view where managers can configure for each stylist which
         // services are offered, override price and duration, and activate
         // or deactivate services【73678961014422†L1515-L1519】.
         '/staff/service-setup': (context) => const ServiceSetupPage(),
+        // Route to assign services to stylists. This screen displays a
+        // matrix of services and stylists with checkboxes to toggle
+        // assignments. Managers can set whether a stylist is allowed to
+        // perform a service. Implements Screen 43 of the schedule module.
+        '/staff/assign-services': (context) => const AssignServicesPage(),
+        // Route to the customers list. Displays a searchable list of
+        // customers with filters and sorting. Implements Screen 44 of
+        // the CRM module.
+        '/crm/customers': (context) => const CustomerListPage(),
+        // Route to the customer profile. Expects an argument 'id' specifying
+        // which customer's details to show. This screen displays basic
+        // information and provides tabs for history, notes and images.
+        '/crm/customer': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic> && args.containsKey('id')) {
+            final id = args['id'];
+            if (id is int) {
+              return CustomerProfilePage(customerId: id);
+            }
+          }
+          return const Scaffold(
+            body: Center(child: Text('Kunde nicht gefunden.')),
+          );
+        },
         // Route to the calendar day view. This screen shows a horizontal
         // timeline with one column per stylist and supports drag‑&‑drop
         // rescheduling and a floating action button to create new bookings.
@@ -209,6 +265,16 @@ class MyApp extends StatelessWidget {
         // Managers see a list of pending requests and can approve or
         // decline them. Implements Screen 40 of the schedule module.
         '/schedule/swap': (context) => const ShiftSwapPage(),
+        // Route to the leave management page. This screen allows stylists
+        // to select vacation days, submit leave requests and view the
+        // status of existing requests. Managers can approve or decline
+        // requests and see conflicts with scheduled shifts. Implements
+        // Screen 41 of the schedule module.
+        '/schedule/leave': (context) => const LeaveManagementPage(),
+        // Route to the timesheet page. Users can start and stop
+        // recordings and view their daily time blocks. Managers can
+        // correct entries. Implements Screen 42 of the schedule module.
+        '/schedule/timesheet': (context) => const TimeSheetPage(),
         // Route used for demo login. Without a backend this simply opens the
         // Home page to allow testing of navigation and UI flows without
         // authentication.

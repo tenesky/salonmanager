@@ -60,46 +60,7 @@ class _CancelBookingsPageState extends State<CancelBookingsPage> {
       _loading = true;
     });
     try {
-      final conn = await DbService.getConnection();
-      final results = await conn.query(
-        '''
-        SELECT b.id,
-               b.start_datetime AS startDateTime,
-               c.first_name AS firstName,
-               c.last_name AS lastName,
-               srv.name AS serviceName,
-               st.name AS stylistName,
-               b.status
-        FROM bookings b
-        JOIN customers c ON b.customer_id = c.id
-        JOIN services srv ON b.service_id = srv.id
-        JOIN stylists st ON b.stylist_id = st.id
-        WHERE b.status IN ('pending','confirmed')
-          AND b.start_datetime >= NOW()
-        ORDER BY b.start_datetime ASC
-        ''',
-      );
-      final loaded = <Map<String, dynamic>>[];
-      for (final row in results) {
-        DateTime dt;
-        final dynamic v = row['startDateTime'];
-        if (v is DateTime) {
-          dt = v.toLocal();
-        } else if (v is String) {
-          dt = DateTime.parse(v).toLocal();
-        } else {
-          dt = DateTime.now();
-        }
-        loaded.add({
-          'id': row['id'],
-          'datetime': dt,
-          'customer': '${row['firstName']} ${row['lastName']}',
-          'service': row['serviceName'],
-          'stylist': row['stylistName'],
-          'status': row['status'],
-        });
-      }
-      await conn.close();
+      final loaded = await DbService.getCancellableAppointments();
       setState(() {
         _appointments = loaded;
         _loading = false;
@@ -124,18 +85,11 @@ class _CancelBookingsPageState extends State<CancelBookingsPage> {
       return;
     }
     try {
-      final conn = await DbService.getConnection();
-      for (final id in selectedIds) {
-        await conn.query(
-          'UPDATE bookings SET status = ? WHERE id = ?',
-          ['canceled', id],
-        );
-        await conn.query(
-          'INSERT INTO cancellation_reasons (booking_id, reason, message) VALUES (?, ?, ?)',
-          [id, reason, message],
-        );
-      }
-      await conn.close();
+      await DbService.cancelBookings(
+        ids: selectedIds,
+        reason: reason,
+        message: message,
+      );
       setState(() {
         _appointments.removeWhere((appt) => _selected.contains(appt['id']));
         _selected.clear();

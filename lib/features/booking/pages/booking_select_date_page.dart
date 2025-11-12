@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../common/themed_background.dart';
+import '../../../services/db_service.dart';
 
 /// Fourth step of the booking wizard: select a date.  
 ///
@@ -27,17 +29,25 @@ class BookingSelectDatePage extends StatefulWidget {
 class _BookingSelectDatePageState extends State<BookingSelectDatePage> {
   late DateTime _displayedMonth;
   DateTime? _selectedDate;
-  late DateTime _nextAvailableDate;
+  DateTime? _nextAvailableDate;
+  /// Dates on which there is at least one available shift.  Populated
+  /// from Supabase via [DbService.getAvailableDates()].  Only these
+  /// dates (excluding weekends) are selectable.
+  Set<DateTime> _availableDates = {};
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _displayedMonth = DateTime(now.year, now.month, 1);
-    // The next available day is set to tomorrow for this example. In a
-    // real application this would be determined by availability data【522868310347694†L150-L156】.
-    _nextAvailableDate = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
     _loadDraftDate();
+    // After loading any previously selected date, load available dates
+    // for the current month.  We delay this call slightly until
+    // widgets have mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAvailableDatesForMonth();
+    });
   }
 
   /// Load the previously selected date from shared preferences, if any.
@@ -66,11 +76,91 @@ class _BookingSelectDatePageState extends State<BookingSelectDatePage> {
     });
   }
 
+  /// Load the available dates for the currently displayed month from
+  /// Supabase.  The availability is determined by shifts and filtered
+  /// by the selected stylist, if any.  Once loaded, the set of
+  /// available dates is stored in [_availableDates] and the earliest
+  /// future available date is stored in [_nextAvailableDate].  While
+  /// loading, [_isLoading] is true to disable interactions.
+  Future<void> _loadAvailableDatesForMonth() async {
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      // Determine the date range for the current month.
+      final monthStart = DateTime(_displayedMonth.year, _displayedMonth.month, 1);
+      final monthEnd = DateTime(_displayedMonth.year, _displayedMonth.month + 1, 0);
+      // Retrieve the selected stylist id (if any) from shared prefs.
+      final prefs = await SharedPreferences.getInstance();
+      final stylistStr = prefs.getString('draft_stylist_id');
+      int? stylistId;
+      if (stylistStr != null && stylistStr.isNotEmpty && stylistStr != '0') {
+        stylistId = int.tryParse(stylistStr);
+      }
+      // Fetch available dates from Supabase.  Ignore errors; they will
+      // propagate and can be handled by outer catch.
+      final dates = await DbService.getAvailableDates(
+        from: monthStart,
+        to: monthEnd,
+        stylistId: stylistId,
+      );
+      // Determine the next available date from today onwards.  We
+      // ensure the date is on or after today and sort ascending.
+      final today = DateTime.now();
+      DateTime? next;
+      for (final d in dates.toList()..sort()) {
+        if (!d.isBefore(DateTime(today.year, today.month, today.day)) && (d.weekday < 6)) {
+          next = d;
+          break;
+        }
+      }
+      setState(() {
+        _availableDates = dates;
+        _nextAvailableDate = next;
+      });
+    } catch (e) {
+      // In case of an error we clear available dates to avoid false
+      // positives and leave _nextAvailableDate null.
+      setState(() {
+        _availableDates = {};
+        _nextAvailableDate = null;
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// Jump to the next available date (if any) by selecting it and
+  /// updating the displayed month.  If no next date is known, this
+  /// method does nothing.
+  void _jumpToNextAvailable() {
+    final next = _nextAvailableDate;
+    if (next == null) return;
+    // If the next date is not in the currently displayed month, update
+    // the month to show it.
+    if (next.month != _displayedMonth.month || next.year != _displayedMonth.year) {
+      setState(() {
+        _displayedMonth = DateTime(next.year, next.month, 1);
+      });
+      // After changing the month, reload available dates for the new
+      // month.  Then select the date after the data is loaded.
+      _loadAvailableDatesForMonth().then((_) {
+        _selectDate(next);
+      });
+    } else {
+      _selectDate(next);
+    }
+  }
+
   /// Navigate to the previous month.
   void _previousMonth() {
     setState(() {
       _displayedMonth = DateTime(_displayedMonth.year, _displayedMonth.month - 1, 1);
     });
+    // Reload available dates for the newly displayed month.
+    _loadAvailableDatesForMonth();
   }
 
   /// Navigate to the next month.
@@ -78,6 +168,8 @@ class _BookingSelectDatePageState extends State<BookingSelectDatePage> {
     setState(() {
       _displayedMonth = DateTime(_displayedMonth.year, _displayedMonth.month + 1, 1);
     });
+    // Reload available dates for the newly displayed month.
+    _loadAvailableDatesForMonth();
   }
 
   /// Build the calendar grid for the displayed month.
@@ -101,16 +193,26 @@ class _BookingSelectDatePageState extends State<BookingSelectDatePage> {
   }
 
   Widget _buildDayCell(DateTime? date) {
-    final bool isCurrentMonth = date != null;
-    final bool isDisabled = date == null || date.weekday >= 6; // weekend closed
+    final today = DateTime.now();
+    final bool isDisabled;
+    if (date == null) {
+      isDisabled = true;
+    } else {
+      // Disable weekends and dates before today or dates not in the
+      // available set.
+      final bool isWeekend = date.weekday >= 6;
+      final bool beforeToday = date.isBefore(DateTime(today.year, today.month, today.day));
+      final bool notAvailable = !_availableDates.contains(date);
+      isDisabled = isWeekend || beforeToday || notAvailable;
+    }
     final bool isSelected = date != null && _selectedDate != null &&
         date.year == _selectedDate!.year &&
         date.month == _selectedDate!.month &&
         date.day == _selectedDate!.day;
-    final bool isNextAvailable = date != null &&
-        date.year == _nextAvailableDate.year &&
-        date.month == _nextAvailableDate.month &&
-        date.day == _nextAvailableDate.day;
+    final bool isNextAvailable = date != null && _nextAvailableDate != null &&
+        date.year == _nextAvailableDate!.year &&
+        date.month == _nextAvailableDate!.month &&
+        date.day == _nextAvailableDate!.day;
     return GestureDetector(
       onTap: isDisabled || date == null
           ? null
@@ -181,10 +283,13 @@ class _BookingSelectDatePageState extends State<BookingSelectDatePage> {
               day.year == _selectedDate!.year &&
               day.month == _selectedDate!.month &&
               day.day == _selectedDate!.day;
-          final bool isNextAvailable = day.year == _nextAvailableDate.year &&
-              day.month == _nextAvailableDate.month &&
-              day.day == _nextAvailableDate.day;
-          final bool isDisabled = day.weekday >= 6;
+          final bool isNextAvailable = _nextAvailableDate != null &&
+              day.year == _nextAvailableDate!.year &&
+              day.month == _nextAvailableDate!.month &&
+              day.day == _nextAvailableDate!.day;
+          final bool isDisabled = day.weekday >= 6 ||
+              day.isBefore(DateTime(now.year, now.month, now.day)) ||
+              !_availableDates.contains(DateTime(day.year, day.month, day.day));
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0),
             child: ChoiceChip(
@@ -226,10 +331,11 @@ class _BookingSelectDatePageState extends State<BookingSelectDatePage> {
       appBar: AppBar(
         title: const Text('Datum auswählen'),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Step indicator
+      body: ThemedBackground(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+          // Step indicator with "Nächst verfügbar" button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: Row(
@@ -242,6 +348,16 @@ class _BookingSelectDatePageState extends State<BookingSelectDatePage> {
                 ),
                 const SizedBox(width: 8),
                 const Text('4/8'),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: _nextAvailableDate != null ? _jumpToNextAvailable : null,
+                  style: TextButton.styleFrom(
+                    minimumSize: Size.zero,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Nächst verfügbar'),
+                ),
               ],
             ),
           ),
@@ -301,7 +417,8 @@ class _BookingSelectDatePageState extends State<BookingSelectDatePage> {
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: _buildSevenDayPeek(),
           ),
-        ],
+          ],
+        ),
       ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.all(16.0),

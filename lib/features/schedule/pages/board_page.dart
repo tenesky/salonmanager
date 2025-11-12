@@ -82,12 +82,9 @@ class _ScheduleBoardPageState extends State<ScheduleBoardPage> {
       _loading = true;
     });
     try {
-      final conn = await DbService.getConnection();
-      final rows = await conn.query('SELECT id, name, color FROM stylists ORDER BY id');
-      final List<Map<String, dynamic>> stylists = [];
+      final List<Map<String, dynamic>> stylists = await DbService.getStylists();
       final List<Color> colours = [];
-      for (final row in rows) {
-        stylists.add({'id': row['id'], 'name': row['name'], 'color': row['color']});
+      for (final row in stylists) {
         final dynamic colorValue = row['color'];
         if (colorValue is String && colorValue.startsWith('#') && colorValue.length == 7) {
           final intColor = int.parse(colorValue.substring(1), radix: 16) + 0xFF000000;
@@ -106,14 +103,12 @@ class _ScheduleBoardPageState extends State<ScheduleBoardPage> {
       while (colours.length < stylists.length) {
         colours.add(defaultPalette[colours.length % defaultPalette.length]);
       }
-      await conn.close();
       setState(() {
         _stylists = stylists;
         stylistColors = colours;
         // Generate a few example shifts spanning different days and stylists
         shifts = [];
         if (stylists.isNotEmpty) {
-          // Example: create one shift per stylist on Monday at 09:00 lasting 4 hours
           for (int i = 0; i < stylists.length; i++) {
             shifts.add(Shift(
               id: 's${i}_1',
@@ -122,7 +117,6 @@ class _ScheduleBoardPageState extends State<ScheduleBoardPage> {
               startTime: const TimeOfDay(hour: 9, minute: 0),
               duration: 240,
             ));
-            // Another shift on Wednesday at 13:00 lasting 3 hours
             shifts.add(Shift(
               id: 's${i}_2',
               stylistIndex: i,

@@ -51,40 +51,7 @@ class _IncomingBookingsPageState extends State<IncomingBookingsPage> {
       _loading = true;
     });
     try {
-      final conn = await DbService.getConnection();
-      final results = await conn.query(
-        '''
-        SELECT b.id,
-               c.first_name AS firstName,
-               c.last_name AS lastName,
-               s.name AS serviceName,
-               b.start_datetime AS startDateTime
-        FROM bookings b
-        JOIN customers c ON b.customer_id = c.id
-        JOIN services s ON b.service_id = s.id
-        WHERE b.status = 'pending'
-        ORDER BY b.start_datetime ASC
-        '''
-      );
-      final bookings = <Map<String, dynamic>>[];
-      for (final row in results) {
-        final DateTime dt;
-        final dynamic dateTimeValue = row['startDateTime'];
-        if (dateTimeValue is DateTime) {
-          dt = dateTimeValue;
-        } else if (dateTimeValue is String) {
-          dt = DateTime.parse(dateTimeValue);
-        } else {
-          dt = DateTime.now();
-        }
-        bookings.add({
-          'id': row['id'],
-          'customer': '${row['firstName']} ${row['lastName']}',
-          'service': row['serviceName'],
-          'datetime': dt,
-        });
-      }
-      await conn.close();
+      final bookings = await DbService.getPendingBookings();
       setState(() {
         _incomingBookings = bookings;
         _loading = false;
@@ -100,12 +67,7 @@ class _IncomingBookingsPageState extends State<IncomingBookingsPage> {
   /// 'confirmed' in the database and removes it from the list.
   Future<void> _acceptBooking(int id) async {
     try {
-      final conn = await DbService.getConnection();
-      await conn.query(
-        'UPDATE bookings SET status = ? WHERE id = ?',
-        ['confirmed', id],
-      );
-      await conn.close();
+      await DbService.confirmBooking(id);
       setState(() {
         _incomingBookings.removeWhere((b) => b['id'] == id);
       });
@@ -131,18 +93,16 @@ class _IncomingBookingsPageState extends State<IncomingBookingsPage> {
     );
     if (result != null) {
       try {
-        final conn = await DbService.getConnection();
+        final suggestions = <DateTime>[];
         for (final suggestion in result) {
           if (suggestion == null) continue;
           final dynamic dt = suggestion['datetime'];
           if (dt is DateTime) {
-            await conn.query(
-              'INSERT INTO reschedule_suggestions (booking_id, suggestion_datetime) VALUES (?, ?)',
-              [booking['id'], dt.toUtc()],
-            );
+            suggestions.add(dt);
           }
         }
-        await conn.close();
+        await DbService.addRescheduleSuggestions(
+            booking['id'] as int, suggestions);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Umbuchungsvorschlag gesendet.')),
         );

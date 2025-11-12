@@ -43,37 +43,24 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
       _loading = true;
     });
     try {
-      final conn = await DbService.getConnection();
       // Load stylists
-      final stylistResults = await conn.query('SELECT id, name FROM stylists ORDER BY id');
-      final List<Map<String, dynamic>> stylists = [];
-      for (final row in stylistResults) {
-        stylists.add({'id': row['id'], 'name': row['name']});
-      }
+      final stylists = await DbService.getStylists();
       // Load services
-      final serviceResults = await conn.query('SELECT id, name, price, duration FROM services ORDER BY id');
-      final List<Map<String, dynamic>> services = [];
-      for (final row in serviceResults) {
-        services.add({
-          'id': row['id'],
-          'name': row['name'],
-          'price': row['price'],
-          'duration': row['duration'],
-        });
-      }
-      // Load existing overrides
-      final overrideResults = await conn.query(
-        'SELECT stylist_id, service_id, price, duration, active FROM employee_service',
-      );
+      final services = await DbService.getServices();
+      // Load existing employee_service mappings
+      final overridesList = await DbService.getEmployeeServices();
       final Map<String, Map<String, dynamic>> overrides = {};
-      for (final row in overrideResults) {
-        overrides['${row['service_id']}_${row['stylist_id']}'] = {
-          'price': row['price'],
-          'duration': row['duration'],
-          'active': row['active'] == 1 || row['active'] == true,
+      for (final row in overridesList) {
+        final int stId = row['stylist_id'] as int;
+        final int svId = row['service_id'] as int;
+        overrides['${svId}_${stId}'] = {
+          // price_override and duration_override may be null
+          'price': row['price_override'],
+          'duration': row['duration_override'],
+          'active': row['active'] == true,
         };
       }
-      // Build cell data
+      // Build cell data using default price/duration from services
       final Map<int, Map<int, Map<String, dynamic>>> cellData = {};
       for (final service in services) {
         final int sid = service['id'] as int;
@@ -81,23 +68,24 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
         for (final stylist in stylists) {
           final int stid = stylist['id'] as int;
           final key = '${sid}_${stid}';
+          final defaultPrice = service['price'] as num;
+          final defaultDuration = service['duration'] as int;
           if (overrides.containsKey(key)) {
             final override = overrides[key]!;
             cellData[sid]![stid] = {
-              'price': override['price'] ?? service['price'],
-              'duration': override['duration'] ?? service['duration'],
+              'price': override['price'] ?? defaultPrice,
+              'duration': override['duration'] ?? defaultDuration,
               'active': override['active'] ?? false,
             };
           } else {
             cellData[sid]![stid] = {
-              'price': service['price'],
-              'duration': service['duration'],
+              'price': defaultPrice,
+              'duration': defaultDuration,
               'active': false,
             };
           }
         }
       }
-      await conn.close();
       setState(() {
         _stylists = stylists;
         _services = services;
@@ -260,33 +248,24 @@ class _ServiceSetupPageState extends State<ServiceSetupPage> {
                   // upsert to either insert a new record or update an
                   // existing one.
                   try {
-                    final conn = await DbService.getConnection();
                     for (final serviceEntry in _cellData.entries) {
                       final int sid = serviceEntry.key;
                       final Map<int, Map<String, dynamic>> stylistMap = serviceEntry.value;
                       for (final stylistEntry in stylistMap.entries) {
                         final int stid = stylistEntry.key;
                         final Map<String, dynamic> cell = stylistEntry.value;
-                        final double price = cell['price'] as double;
+                        final num price = cell['price'] as num;
                         final int duration = cell['duration'] as int;
                         final bool active = cell['active'] as bool;
-                        // Build the SQL upsert outside of the query call. If this multi‑line
-                        // literal were passed directly into conn.query it could be parsed
-                        // incorrectly by the Dart compiler, leading to syntax errors during
-                        // the iOS build. Using a local variable ensures the string is
-                        // recognised as a single argument.
-                        const String upsertEmployeeService = '''
-INSERT INTO employee_service (stylist_id, service_id, price, duration, active)
-VALUES (?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE price = VALUES(price), duration = VALUES(duration), active = VALUES(active)
-''';
-                        await conn.query(
-                          upsertEmployeeService,
-                          [stid, sid, price, duration, active ? 1 : 0],
+                        await DbService.upsertEmployeeService(
+                          stylistId: stid,
+                          serviceId: sid,
+                          active: active,
+                          priceOverride: price,
+                          durationOverride: duration,
                         );
                       }
                     }
-                    await conn.close();
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Leistungs-Setup gespeichert')),
                     );

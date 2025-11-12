@@ -91,14 +91,8 @@ class _ShiftSwapPageState extends State<ShiftSwapPage> {
       _loading = true;
     });
     try {
-      final conn = await DbService.getConnection();
-      final rows = await conn.query('SELECT id, name FROM stylists ORDER BY id');
-      final List<Map<String, dynamic>> stylists = [];
-      for (final row in rows) {
-        stylists.add({'id': row['id'], 'name': row['name']});
-      }
-      await conn.close();
-      // Generate sample shifts: assign the first two stylists a couple of
+      final List<Map<String, dynamic>> stylists = await DbService.getStylists();
+      // Generate sample shifts: assign the first stylist a couple of
       // shifts this week. In a real implementation you would fetch
       // actual shifts for the logged in user.
       final List<SimpleShift> myShifts = [];

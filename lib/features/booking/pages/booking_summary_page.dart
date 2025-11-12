@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../services/db_service.dart';
+import '../../../services/auth_service.dart';
 
 /// Eighth step of the booking wizard: summary & booking confirmation.
 ///
@@ -24,6 +26,10 @@ class BookingSummaryPage extends StatefulWidget {
 class _BookingSummaryPageState extends State<BookingSummaryPage> {
   Map<String, dynamic> _summary = {};
   bool _loading = false;
+  bool _acceptedTerms = true;
+
+  double _totalPrice = 0;
+  int _totalDuration = 0;
 
   @override
   void initState() {
@@ -38,7 +44,7 @@ class _BookingSummaryPageState extends State<BookingSummaryPage> {
   Future<void> _loadSummary() async {
     final prefs = await SharedPreferences.getInstance();
     final salonId = prefs.getString('draft_salon_id');
-    final serviceId = prefs.getString('draft_service_id');
+    final List<String>? serviceIds = prefs.getStringList('draft_service_ids');
     final stylistId = prefs.getString('draft_stylist_id');
     final dateStr = prefs.getString('draft_date');
     final timeSlot = prefs.getString('draft_time_slot');
@@ -46,105 +52,92 @@ class _BookingSummaryPageState extends State<BookingSummaryPage> {
     final imagePaths = prefs.getStringList('draft_image_paths');
     final paymentType = prefs.getString('draft_payment_type');
     final paymentMethod = prefs.getString('draft_payment_method');
-
-    // Map salon ID to name using the static list from SalonListPage.
+    final paymentDeposit = prefs.getString('draft_payment_deposit');
+    // Resolve salon name
     String? salonName;
-    if (salonId != null) {
-      // Static salon list matching the IDs defined in BookingSelectSalonPage.
-      final salons = [
-        {'id': '1', 'name': 'Salon Elegance'},
-        {'id': '2', 'name': 'Hair Couture'},
-        {'id': '3', 'name': 'Golden Scissors'},
-        {'id': '4', 'name': 'Style Studio'},
-        {'id': '5', 'name': 'Beauty Bar'},
-      ];
-      final salon = salons.firstWhere((s) => s['id'] == salonId, orElse: () => {});
-      salonName = salon['name'] as String?;
+    if (salonId != null && salonId.isNotEmpty) {
+      final parsedId = int.tryParse(salonId);
+      if (parsedId != null) {
+        final salon = await DbService.getSalonById(parsedId);
+        salonName = salon?['name'] as String?;
+      }
     }
-    // Map service ID to details using the static list from BookingSelectServicePage.
+    // Resolve services: names and aggregate price/duration
     String? serviceTitle;
     String? servicePrice;
     String? serviceDuration;
-    if (serviceId != null) {
-      final services = [
-        {
-          'id': 'd1',
-          'title': 'Damenhaarschnitt',
-          'price': '€40–€60',
-          'duration': '60 min',
-        },
-        {
-          'id': 'd2',
-          'title': 'Färben & Strähnen',
-          'price': '€70–€120',
-          'duration': '90 min',
-        },
-        {
-          'id': 'h1',
-          'title': 'Herrenhaarschnitt',
-          'price': '€25–€40',
-          'duration': '30 min',
-        },
-        {
-          'id': 'h2',
-          'title': 'Rasur & Bartpflege',
-          'price': '€20–€35',
-          'duration': '30 min',
-        },
-        {
-          'id': 'b1',
-          'title': 'Barttrimmen',
-          'price': '€15–€25',
-          'duration': '20 min',
-        },
-        {
-          'id': 'b2',
-          'title': 'Vollbartpflege',
-          'price': '€25–€40',
-          'duration': '30 min',
-        },
-        {
-          'id': 's1',
-          'title': 'Balayage',
-          'price': '€120–€180',
-          'duration': '120 min',
-        },
-        {
-          'id': 's2',
-          'title': 'Keratin‑Behandlung',
-          'price': '€150–€200',
-          'duration': '150 min',
-        },
-      ];
-      final service = services.firstWhere((s) => s['id'] == serviceId, orElse: () => {});
-      serviceTitle = service['title'] as String?;
-      servicePrice = service['price'] as String?;
-      serviceDuration = service['duration'] as String?;
+    double totalPrice = 0;
+    int totalDuration = 0;
+    List<Map<String, dynamic>> services = await DbService.getServices();
+    List<String> selectedNames = [];
+    if (serviceIds != null && serviceIds.isNotEmpty) {
+      final idsInt = serviceIds.map((id) => int.tryParse(id)).whereType<int>().toList();
+      for (final sid in idsInt) {
+        final svc = services.firstWhere((s) => s['id'] == sid, orElse: () => {});
+        if (svc.isNotEmpty) {
+          selectedNames.add(svc['name'] as String);
+          final dur = svc['duration'] as int? ?? 0;
+          final price = svc['price'];
+          totalDuration += dur;
+          if (price is num) {
+            totalPrice += price.toDouble();
+          } else if (price is String) {
+            totalPrice += double.tryParse(price) ?? 0;
+          }
+        }
+      }
+      if (selectedNames.isNotEmpty) {
+        serviceTitle = selectedNames.join(', ');
+        servicePrice = '${totalPrice.toStringAsFixed(2)} €';
+        serviceDuration = '${totalDuration.toString()} Min';
+      }
     }
-    // Map stylist ID to name using the static list from BookingSelectStylistPage.
+    // Resolve stylist name
     String? stylistName;
-    if (stylistId != null) {
-      final stylists = [
-        {'id': 'auto', 'name': 'Automatisch zuweisen'},
-        {'id': 's1', 'name': 'Lena Müller'},
-        {'id': 's2', 'name': 'Maximilian Schröder'},
-        {'id': 's3', 'name': 'Aylin Kaya'},
-      ];
-      final stylist = stylists.firstWhere((s) => s['id'] == stylistId, orElse: () => {});
-      stylistName = stylist['name'] as String?;
+    int? stylistIdParsed;
+    if (stylistId != null && stylistId.isNotEmpty && stylistId != 'auto') {
+      stylistIdParsed = int.tryParse(stylistId);
+      if (stylistIdParsed != null) {
+        try {
+          final stylists = await DbService.getStylists();
+          final st = stylists.firstWhere((s) => s['id'] == stylistIdParsed,
+              orElse: () => {});
+          if (st.isNotEmpty) {
+            stylistName = st['name'] as String?;
+          }
+        } catch (_) {}
+      }
+    } else {
+      stylistName = 'Beliebig';
     }
-    // Format date/time.
+    // Format date/time
     String? dateDisplay;
     String? timeDisplay;
+    DateTime? startDate;
     if (dateStr != null) {
       final date = DateTime.tryParse(dateStr);
       if (date != null) {
         dateDisplay = DateFormat('EEEE, d. MMMM yyyy', 'de_DE').format(date);
+        startDate = date;
       }
     }
     if (timeSlot != null) {
       timeDisplay = timeSlot;
+      if (startDate != null) {
+        // parse time into startDate for later use
+        final parts = timeSlot.split(':');
+        if (parts.length >= 2) {
+          final hour = int.tryParse(parts[0]);
+          final minute = int.tryParse(parts[1]);
+          if (hour != null && minute != null) {
+            startDate = DateTime(startDate.year, startDate.month, startDate.day, hour, minute);
+          }
+        }
+      }
     }
+    // Save totals to state
+    _totalPrice = totalPrice;
+    _totalDuration = totalDuration;
     setState(() {
       _summary = {
         'salonName': salonName,
@@ -158,6 +151,10 @@ class _BookingSummaryPageState extends State<BookingSummaryPage> {
         'imagePaths': imagePaths ?? [],
         'paymentType': paymentType,
         'paymentMethod': paymentMethod,
+        'paymentDeposit': paymentDeposit,
+        'startDateTime': startDate?.toIso8601String(),
+        'serviceIds': serviceIds,
+        'stylistId': stylistIdParsed,
       };
     });
   }
@@ -167,42 +164,100 @@ class _BookingSummaryPageState extends State<BookingSummaryPage> {
   /// list under the key `bookings`. After storing the booking this
   /// method navigates to the success page.
   Future<void> _finaliseBooking() async {
+    if (!_acceptedTerms) {
+      // Require acceptance of terms before proceeding
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Bitte akzeptieren Sie die AGB/DSGVO-Bedingungen.'),
+      ));
+      return;
+    }
     setState(() {
       _loading = true;
     });
-    // Simulate network delay
-    await Future.delayed(const Duration(seconds: 2));
-    final prefs = await SharedPreferences.getInstance();
-    // Retrieve existing bookings
-    final existing = prefs.getStringList('bookings') ?? [];
-    // Create a booking map with a timestamp as id
-    final booking = {
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
-      ..._summary,
-      'status': 'confirmed',
-    };
-    existing.add(jsonEncode(booking));
-    await prefs.setStringList('bookings', existing);
-    // Clear draft keys
-    for (final key in [
-      'draft_salon_id',
-      'draft_service_id',
-      'draft_stylist_id',
-      'draft_date',
-      'draft_time_slot',
-      'draft_notes',
-      'draft_image_paths',
-      'draft_payment_type',
-      'draft_payment_method',
-      'draft_payment_terms'
-    ]) {
-      await prefs.remove(key);
+    try {
+      // Determine customer from logged-in user
+      final email = AuthService.currentUserEmail();
+      int? customerId;
+      if (email != null) {
+        final customer = await DbService.getCustomerByEmail(email);
+        if (customer != null) {
+          customerId = customer['id'] as int?;
+        }
+      }
+      // Parse stylist
+      int? stylistId;
+      final sid = _summary['stylistId'];
+      if (sid is int) {
+        stylistId = sid;
+      }
+      // Service IDs
+      final List<String>? serviceIds = (_summary['serviceIds'] as List?)?.cast<String>();
+      int? primaryServiceId;
+      if (serviceIds != null && serviceIds.isNotEmpty) {
+        primaryServiceId = int.tryParse(serviceIds.first);
+      }
+      // Start datetime
+      DateTime? startDt;
+      final startIso = _summary['startDateTime'] as String?;
+      if (startIso != null) {
+        startDt = DateTime.tryParse(startIso);
+      }
+      // Notes: include notes and payment deposit if present
+      String combinedNotes = '';
+      final notes = _summary['notes'] as String?;
+      if (notes != null && notes.isNotEmpty) {
+        combinedNotes += notes;
+      }
+      final deposit = _summary['paymentDeposit'] as String?;
+      if (deposit != null && deposit.isNotEmpty) {
+        if (combinedNotes.isNotEmpty) combinedNotes += '\n';
+        combinedNotes += 'Anzahlung: $deposit';
+      }
+      if (primaryServiceId == null || startDt == null) {
+        throw Exception('Fehlende Daten');
+      }
+      final bookingId = await DbService.createBooking(
+        customerId: customerId,
+        stylistId: stylistId,
+        serviceId: primaryServiceId,
+        startDateTime: startDt,
+        duration: _totalDuration,
+        price: _totalPrice,
+        notes: combinedNotes,
+        status: 'pending',
+      );
+      // Clear draft values after successful creation
+      final prefs = await SharedPreferences.getInstance();
+      for (final key in [
+        'draft_salon_id',
+        'draft_service_ids',
+        'draft_stylist_id',
+        'draft_date',
+        'draft_time_slot',
+        'draft_notes',
+        'draft_image_paths',
+        'draft_payment_type',
+        'draft_payment_method',
+        'draft_payment_deposit'
+      ]) {
+        await prefs.remove(key);
+      }
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+      });
+      Navigator.of(context).pushReplacementNamed(
+        '/booking/success',
+        arguments: bookingId,
+      );
+    } catch (e) {
+      setState(() {
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Fehler beim Speichern der Buchung: $e'),
+      ));
     }
-    setState(() {
-      _loading = false;
-    });
-    if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/booking/success');
   }
 
   @override
@@ -284,6 +339,26 @@ class _BookingSummaryPageState extends State<BookingSummaryPage> {
                         'Stornofrist: bis 24 Stunden vor dem Termin kostenlos stornierbar.',
                         style: theme.textTheme.bodySmall,
                       ),
+                      const SizedBox(height: 16),
+                      // Terms and conditions acceptance
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _acceptedTerms,
+                            onChanged: (val) {
+                              setState(() {
+                                _acceptedTerms = val ?? false;
+                              });
+                            },
+                          ),
+                          Expanded(
+                            child: Text(
+                              'Ich akzeptiere die Allgemeinen Geschäftsbedingungen und die Datenschutzerklärung.',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -309,7 +384,7 @@ class _BookingSummaryPageState extends State<BookingSummaryPage> {
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.all(16.0),
         child: ElevatedButton(
-          onPressed: _loading ? null : _finaliseBooking,
+          onPressed: (_loading || !_acceptedTerms) ? null : _finaliseBooking,
           child: const Text('Buchen'),
         ),
       ),

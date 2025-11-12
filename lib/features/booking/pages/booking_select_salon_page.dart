@@ -18,62 +18,10 @@ class BookingSelectSalonPage extends StatefulWidget {
 }
 
 class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
-  // Sample data for salons. In a real application this would come from
-  // the backend and include many more fields. Each map contains an
-  // identifier, name, distance in km, rating, price level, the next
-  // available slot, whether free appointments exist and a coordinate.
-  final List<Map<String, dynamic>> _salons = [
-    {
-      'id': '1',
-      'name': 'Salon Elegance',
-      'distance': 1.2,
-      'rating': 4.8,
-      'price': '\$\$',
-      'nextSlot': 'Heute 14:30',
-      'hasFree': true,
-      'location': const LatLng(48.137154, 11.576124),
-    },
-    {
-      'id': '2',
-      'name': 'Hair Couture',
-      'distance': 2.5,
-      'rating': 4.6,
-      'price': '\$\$\$',
-      'nextSlot': 'Heute 15:00',
-      'hasFree': false,
-      'location': const LatLng(48.1365, 11.5800),
-    },
-    {
-      'id': '3',
-      'name': 'Golden Scissors',
-      'distance': 3.0,
-      'rating': 4.7,
-      'price': '\$\$',
-      'nextSlot': 'Morgen 09:00',
-      'hasFree': true,
-      'location': const LatLng(48.1390, 11.5750),
-    },
-    {
-      'id': '4',
-      'name': 'Style Studio',
-      'distance': 4.1,
-      'rating': 4.5,
-      'price': '\$\$\$\$',
-      'nextSlot': 'Morgen 10:30',
-      'hasFree': true,
-      'location': const LatLng(48.1355, 11.5780),
-    },
-    {
-      'id': '5',
-      'name': 'Beauty Bar',
-      'distance': 5.0,
-      'rating': 4.4,
-      'price': '\$',
-      'nextSlot': 'Heute 16:00',
-      'hasFree': false,
-      'location': const LatLng(48.1345, 11.5795),
-    },
-  ];
+  /// Salons loaded from Supabase. Each entry contains id, name,
+  /// rating, price_level, next_slot, has_free, latitude and
+  /// longitude. Initially empty until [_loadSalons] runs.
+  List<Map<String, dynamic>> _salons = [];
 
   // Search and filter state
   final TextEditingController _searchController = TextEditingController();
@@ -93,6 +41,8 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
   void initState() {
     super.initState();
     _checkAuthAndLoad();
+    // Immediately load salons when the page is opened
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSalons());
   }
 
   /// Checks whether the user is authenticated via Supabase. If not,
@@ -138,25 +88,54 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
     );
   }
 
+  /// Loads salons from the backend based on the current search and
+  /// filter criteria. Uses [DbService.getSalons] to retrieve the
+  /// results. Any errors are silently swallowed.
+  Future<void> _loadSalons() async {
+    try {
+      final salons = await DbService.getSalons(
+        searchQuery: _searchQuery,
+        selectedPrices: _selectedPrices,
+        minRating: _minRating,
+        onlyFree: _onlyFree,
+      );
+      setState(() {
+        _salons = salons;
+      });
+    } catch (_) {
+      // ignore
+    }
+  }
+
   /// Returns a list of salons filtered according to the search query
   /// and filter settings. The filters include distance, price,
   /// minimum rating and availability.
   List<Map<String, dynamic>> get _filteredSalons {
     return _salons.where((salon) {
-      final name = (salon['name'] as String).toLowerCase();
+      final name = (salon['name']?.toString() ?? '').toLowerCase();
       if (_searchQuery.isNotEmpty && !name.contains(_searchQuery)) {
         return false;
       }
-      if (_maxDistance != null && (salon['distance'] as double) > _maxDistance!) {
+      // Distance filtering is not applied because no distance field is
+      // available in the Supabase data.
+      if (_selectedPrices.isNotEmpty && !_selectedPrices.contains(salon['price_level'])) {
         return false;
       }
-      if (_selectedPrices.isNotEmpty && !_selectedPrices.contains(salon['price'])) {
-        return false;
+      if (_minRating != null) {
+        final dynamic rating = salon['rating'];
+        double r;
+        if (rating is int) {
+          r = rating.toDouble();
+        } else if (rating is double) {
+          r = rating;
+        } else {
+          r = 0.0;
+        }
+        if (r < _minRating!) {
+          return false;
+        }
       }
-      if (_minRating != null && (salon['rating'] as double) < _minRating!) {
-        return false;
-      }
-      if (_onlyFree && (salon['hasFree'] as bool) == false) {
+      if (_onlyFree && !(salon['has_free'] as bool? ?? false)) {
         return false;
       }
       return true;
@@ -203,15 +182,30 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
                 children: [
                   Icon(Icons.star, color: Colors.amber.shade600),
                   const SizedBox(width: 4),
-                  Text((salon['rating'] as double).toStringAsFixed(1)),
+                  // The rating from Supabase can be int or double. Convert
+                  // gracefully and format with one decimal place.
+                  Builder(builder: (_) {
+                    final dynamic ratingDyn = salon['rating'];
+                    double rating;
+                    if (ratingDyn is int) {
+                      rating = ratingDyn.toDouble();
+                    } else if (ratingDyn is double) {
+                      rating = ratingDyn;
+                    } else {
+                      rating = 0.0;
+                    }
+                    return Text(rating.toStringAsFixed(1));
+                  }),
                   const SizedBox(width: 16),
                   const Icon(Icons.attach_money, size: 20),
                   const SizedBox(width: 2),
-                  Text(salon['price'] as String),
+                  Text(salon['price_level'] as String),
                 ],
               ),
               const SizedBox(height: 12),
-              Text(salon['hasFree'] as bool ? 'Freie Termine verfügbar' : 'Keine freien Termine'),
+              Text((salon['has_free'] as bool? ?? false)
+                  ? 'Freie Termine verfügbar'
+                  : 'Keine freien Termine'),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -273,6 +267,7 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
                       setState(() {
                         _searchQuery = value.toLowerCase();
                       });
+                      _loadSalons();
                     },
                   ),
                 ),
@@ -328,6 +323,7 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
                             _selectedPrices.remove(price);
                           }
                         });
+                        _loadSalons();
                       },
                     );
                   }).toList(),
@@ -345,6 +341,7 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
                         setState(() {
                           _minRating = selected ? null : rating;
                         });
+                        _loadSalons();
                       },
                     );
                   }).toList(),
@@ -356,10 +353,11 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
                     Switch(
                       value: _onlyFree,
                       onChanged: (bool value) {
-                        setState(() {
-                          _onlyFree = value;
-                        });
-                      },
+                            setState(() {
+                              _onlyFree = value;
+                            });
+                            _loadSalons();
+                          },
                     ),
                   ],
                 ),
@@ -418,30 +416,40 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
               children: [
                 Row(
                   children: [
+                    // Rating
                     Icon(Icons.star, size: 16, color: Colors.amber.shade600),
                     const SizedBox(width: 4),
-                    Text((salon['rating'] as double).toString()),
+                    Builder(builder: (_) {
+                      final dynamic ratingDyn = salon['rating'];
+                      double rating;
+                      if (ratingDyn is int) {
+                        rating = ratingDyn.toDouble();
+                      } else if (ratingDyn is double) {
+                        rating = ratingDyn;
+                      } else {
+                        rating = 0.0;
+                      }
+                      return Text(rating.toStringAsFixed(1));
+                    }),
                     const SizedBox(width: 8),
-                    const Icon(Icons.location_on, size: 16),
-                    const SizedBox(width: 4),
-                    Text('${(salon['distance'] as double).toStringAsFixed(1)} km'),
-                    const SizedBox(width: 8),
+                    // Price level
                     const Icon(Icons.attach_money, size: 16),
                     const SizedBox(width: 2),
-                    Text(salon['price'] as String),
+                    Text(salon['price_level'] as String),
                     const SizedBox(width: 8),
                     // Badge for next slot
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceVariant,
-                        borderRadius: BorderRadius.circular(4),
+                    if ((salon['next_slot'] ?? '').toString().isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceVariant,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          salon['next_slot'] as String,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
                       ),
-                      child: Text(
-                        salon['nextSlot'] as String,
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ),
                   ],
                 ),
               ],
@@ -462,9 +470,20 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
   /// logic applies as in the list view.
   Widget _buildMapView(List<Map<String, dynamic>> salons) {
     // Determine the initial centre. Use the first salon or a default.
-    final LatLng centre = salons.isNotEmpty
-        ? salons.first['location'] as LatLng
-        : const LatLng(48.137154, 11.576124);
+    // Determine the initial centre. Use the first salon's coordinates or a
+    // default location (Munich) if no salons are available. Convert
+    // numeric fields safely to double.
+    final LatLng centre;
+    if (salons.isNotEmpty) {
+      final first = salons.first;
+      final latNum = first['latitude'];
+      final lngNum = first['longitude'];
+      double lat = latNum is num ? latNum.toDouble() : 48.137154;
+      double lng = lngNum is num ? lngNum.toDouble() : 11.576124;
+      centre = LatLng(lat, lng);
+    } else {
+      centre = const LatLng(48.137154, 11.576124);
+    }
     return FlutterMap(
       options: MapOptions(
         center: centre,
@@ -479,12 +498,16 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
           userAgentPackageName: 'com.example.salonmanager',
         ),
         MarkerLayer(
-          // Explicitly type the iterable as List<Marker>. Use the `child` parameter
-          // instead of the deprecated `builder` parameter. This ensures
-          // compatibility with flutter_map >=6.x.
+          // Explicitly type the iterable as List<Marker>. Convert lat/lng to
+          // LatLng objects for marker positions.
           markers: salons.map<Marker>((salon) {
+            final latNum = salon['latitude'];
+            final lngNum = salon['longitude'];
+            double lat = latNum is num ? latNum.toDouble() : 0.0;
+            double lng = lngNum is num ? lngNum.toDouble() : 0.0;
+            final LatLng point = LatLng(lat, lng);
             return Marker(
-              point: salon['location'] as LatLng,
+              point: point,
               width: 40,
               height: 40,
               child: GestureDetector(

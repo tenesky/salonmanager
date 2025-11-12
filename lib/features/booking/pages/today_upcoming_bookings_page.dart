@@ -48,46 +48,7 @@ class _TodayUpcomingBookingsPageState extends State<TodayUpcomingBookingsPage> {
       _loading = true;
     });
     try {
-      final conn = await DbService.getConnection();
-      final results = await conn.query(
-        '''
-        SELECT b.id,
-               b.start_datetime AS startDateTime,
-               b.duration,
-               c.first_name AS firstName,
-               c.last_name AS lastName,
-               srv.name AS serviceName,
-               st.name AS stylistName,
-               b.status
-        FROM bookings b
-        JOIN customers c ON b.customer_id = c.id
-        JOIN services srv ON b.service_id = srv.id
-        JOIN stylists st ON b.stylist_id = st.id
-        WHERE b.status IN ('pending','confirmed')
-        ORDER BY b.start_datetime ASC
-        ''',
-      );
-      final List<Map<String, dynamic>> loaded = [];
-      for (final row in results) {
-        DateTime dt;
-        final dynamic v = row['startDateTime'];
-        if (v is DateTime) {
-          dt = v.toLocal();
-        } else if (v is String) {
-          dt = DateTime.parse(v).toLocal();
-        } else {
-          dt = DateTime.now();
-        }
-        loaded.add({
-          'id': row['id'],
-          'datetime': dt,
-          'customer': '${row['firstName']} ${row['lastName']}',
-          'service': row['serviceName'],
-          'stylist': row['stylistName'],
-          'status': row['status'],
-        });
-      }
-      await conn.close();
+      final loaded = await DbService.getUpcomingOrTodayAppointments();
       setState(() {
         _appointments = loaded;
         _loading = false;

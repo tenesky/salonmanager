@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../services/db_service.dart';
 
 /// Fifth step of the booking wizard: select a time slot.  
 ///
@@ -28,12 +29,13 @@ class _BookingSelectTimePageState extends State<BookingSelectTimePage> {
   String? _selectedTime;
   Timer? _holdTimer;
   int _remainingSeconds = 0;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
     _loadDraftDate();
-    _initSlots();
+    // Timeslots will be loaded once the selected date is known.
   }
 
   @override
@@ -47,35 +49,121 @@ class _BookingSelectTimePageState extends State<BookingSelectTimePage> {
     final stored = prefs.getString('draft_date');
     if (stored != null) {
       try {
+        final parsed = DateTime.parse(stored);
         setState(() {
-          _selectedDate = DateTime.parse(stored);
+          _selectedDate = parsed;
         });
       } catch (_) {
         // ignore parse errors
       }
     }
+    // After loading the date, load the available timeslots
+    if (_selectedDate != null) {
+      await _loadTimeslots();
+    }
   }
 
   /// Initialize sample times and statuses. In a real app this would
   /// call the availability API for the selected date【522868310347694†L155-L160】.
-  void _initSlots() {
-    final times = <String>[];
-    for (int hour = 9; hour <= 17; hour++) {
-      for (int minute = 0; minute < 60; minute += 30) {
-        final time = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
-        times.add(time);
-      }
-    }
+  Future<void> _loadTimeslots() async {
+    if (_selectedDate == null) return;
     setState(() {
-      _slots = times.map((t) {
-        String status = 'frei';
-        // Mark some demo slots as booked
-        if (t == '10:30' || t == '13:00' || t == '15:30') {
-          status = 'belegt';
-        }
-        return {'time': t, 'status': status};
-      }).toList();
+      _isLoading = true;
     });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stylistStr = prefs.getString('draft_stylist_id');
+      int? stylistId;
+      if (stylistStr != null && stylistStr.isNotEmpty && stylistStr != '0') {
+        stylistId = int.tryParse(stylistStr);
+      }
+      // Load shifts and bookings for the selected date from Supabase.
+      final shifts = await DbService.getShiftsForDate(_selectedDate!, stylistId: stylistId);
+      final bookings = await DbService.getBookingsForDate(_selectedDate!, stylistId: stylistId);
+      // Determine the time range for the grid.  If no shifts are
+      // available, the slot list remains empty.
+      if (shifts.isEmpty) {
+        setState(() {
+          _slots = [];
+          _isLoading = false;
+        });
+        return;
+      }
+      // Compute the earliest start and latest end among shifts.
+      DateTime earliest = shifts.first['start'] as DateTime;
+      DateTime latest = shifts.first['end'] as DateTime;
+      for (final s in shifts) {
+        final sStart = s['start'] as DateTime;
+        final sEnd = s['end'] as DateTime;
+        if (sStart.isBefore(earliest)) earliest = sStart;
+        if (sEnd.isAfter(latest)) latest = sEnd;
+      }
+      // Generate 30‑minute slots between earliest and latest.
+      final List<Map<String, String>> slots = [];
+      DateTime current = earliest;
+      while (!current.isAfter(latest.subtract(const Duration(minutes: 30)))) {
+        final next = current.add(const Duration(minutes: 30));
+        // Determine status: free if at least one stylist has this slot
+        // within a shift and not booked; otherwise booked.
+        bool available = false;
+        if (stylistId != null) {
+          // Only check the single stylist
+          for (final s in shifts.where((sh) => sh['stylist_id'] == stylistId)) {
+            final start = s['start'] as DateTime;
+            final end = s['end'] as DateTime;
+            if (current.isAtSameMomentAs(start) || (current.isAfter(start) && current.isBefore(end))) {
+              // Within shift range
+              // Check if there is a booking overlapping this slot for this stylist
+              final hasBooking = bookings.any((b) {
+                final bStart = b['start'] as DateTime;
+                final bEnd = b['end'] as DateTime;
+                return (current.isBefore(bEnd) && next.isAfter(bStart));
+              });
+              if (!hasBooking) {
+                available = true;
+                break;
+              }
+            }
+          }
+        } else {
+          // Beliebig: free if any stylist has this slot within shift and not booked
+          for (final s in shifts) {
+            final start = s['start'] as DateTime;
+            final end = s['end'] as DateTime;
+            if (current.isAtSameMomentAs(start) || (current.isAfter(start) && current.isBefore(end))) {
+              // Within shift
+              final sid = s['stylist_id'] as int?;
+              // Find bookings for this stylist
+              final hasBooking = bookings.any((b) {
+                final bStart = b['start'] as DateTime;
+                final bEnd = b['end'] as DateTime;
+                if (stylistId != null && b['stylist_id'] != stylistId) return false;
+                return (current.isBefore(bEnd) && next.isAfter(bStart) && (b['stylist_id'] == sid));
+              });
+              if (!hasBooking) {
+                available = true;
+                break;
+              }
+            }
+          }
+        }
+        slots.add({'time': DateFormat('HH:mm').format(current), 'status': available ? 'frei' : 'belegt'});
+        current = next;
+      }
+      setState(() {
+        _slots = slots;
+      });
+    } catch (e) {
+      // On error, show no slots.  In a real app, you might show an
+      // error message to the user.
+      setState(() {
+        _slots = [];
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   /// Start a soft hold countdown for the selected slot.
@@ -171,66 +259,66 @@ class _BookingSelectTimePageState extends State<BookingSelectTimePage> {
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
-          // Timeslots grid
+          // Timeslots grid or loading indicator
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 2.8,
-                ),
-                itemCount: _slots.length,
-                itemBuilder: (context, index) {
-                  final slot = _slots[index];
-                  final status = slot['status'];
-                  final isSelected = _selectedTime == slot['time'];
-                  Color borderColor;
-                  Color backgroundColor;
-                  // Allow the text color to be nullable because the default
-                  // case assigns null to it when the slot is not selected.
-                  Color? textColor;
-                  switch (status) {
-                    case 'belegt':
-                      borderColor = Colors.grey;
-                      backgroundColor = Colors.grey.shade200;
-                      textColor = Colors.grey;
-                      break;
-                    case 'gehalten':
-                      borderColor = Theme.of(context).colorScheme.secondary;
-                      backgroundColor = Theme.of(context).colorScheme.secondary.withOpacity(0.2);
-                      textColor = Theme.of(context).colorScheme.secondary;
-                      break;
-                    default:
-                      borderColor = isSelected
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).dividerColor;
-                      backgroundColor = isSelected
-                          ? Theme.of(context).colorScheme.primary.withOpacity(0.2)
-                          : Colors.transparent;
-                      textColor = isSelected
-                          ? Theme.of(context).colorScheme.primary
-                          : null;
-                  }
-                  return GestureDetector(
-                    onTap: () => _selectSlot(index),
-                    child: Container(
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: backgroundColor,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: borderColor),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : GridView.builder(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 2.8,
                       ),
-                      child: Text(
-                        slot['time']!,
-                        style: TextStyle(color: textColor),
-                      ),
+                      itemCount: _slots.length,
+                      itemBuilder: (context, index) {
+                        final slot = _slots[index];
+                        final status = slot['status'];
+                        final isSelected = _selectedTime == slot['time'];
+                        Color borderColor;
+                        Color backgroundColor;
+                        Color? textColor;
+                        switch (status) {
+                          case 'belegt':
+                            borderColor = Colors.grey;
+                            backgroundColor = Colors.grey.shade200;
+                            textColor = Colors.grey;
+                            break;
+                          case 'gehalten':
+                            borderColor = Theme.of(context).colorScheme.secondary;
+                            backgroundColor = Theme.of(context).colorScheme.secondary.withOpacity(0.2);
+                            textColor = Theme.of(context).colorScheme.secondary;
+                            break;
+                          default:
+                            borderColor = isSelected
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).dividerColor;
+                            backgroundColor = isSelected
+                                ? Theme.of(context).colorScheme.primary.withOpacity(0.2)
+                                : Colors.transparent;
+                            textColor = isSelected
+                                ? Theme.of(context).colorScheme.primary
+                                : null;
+                        }
+                        return GestureDetector(
+                          onTap: () => _selectSlot(index),
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: backgroundColor,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: borderColor),
+                            ),
+                            child: Text(
+                              slot['time']!,
+                              style: TextStyle(color: textColor),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
           ),
           // Countdown display if holding
