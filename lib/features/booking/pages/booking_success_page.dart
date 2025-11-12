@@ -61,11 +61,19 @@ class _BookingSuccessPageState extends State<BookingSuccessPage> {
       final formattedTime = DateFormat('HH:mm').format(dt);
       details += 'Datum: $formattedDate\nUhrzeit: $formattedTime';
     }
-    // Service name (may be nested in services)
+    // Service name: handle both a single service map and a list of services.
     String? serviceName;
     final svc = booking['services'];
     if (svc is Map) {
+      // Legacy format: services as a map
       serviceName = svc['name'] as String?;
+    } else if (svc is List && svc.isNotEmpty) {
+      final firstSvc = svc.first;
+      if (firstSvc is Map<String, dynamic> && firstSvc.containsKey('name')) {
+        serviceName = firstSvc['name'] as String?;
+      }
+    } else if (booking.containsKey('serviceName')) {
+      serviceName = booking['serviceName'] as String?;
     }
     if (serviceName != null) {
       details += '\nLeistung: $serviceName';

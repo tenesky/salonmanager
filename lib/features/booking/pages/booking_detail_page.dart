@@ -79,7 +79,25 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                     children: [
                       _buildDetailCard(
                         title: 'Service',
-                        content: _booking?['serviceName'] ?? '–',
+                        content: () {
+                          if (_booking == null) return '–';
+                          // Prefer explicit serviceName field
+                          final nameField = _booking?['serviceName'];
+                          if (nameField is String && nameField.isNotEmpty) {
+                            return nameField;
+                          }
+                          final svc = _booking?['services'];
+                          if (svc is List && svc.isNotEmpty) {
+                            final firstSvc = svc.first;
+                            if (firstSvc is Map<String, dynamic> && firstSvc.containsKey('name')) {
+                              return firstSvc['name'] as String;
+                            }
+                          } else if (svc is Map) {
+                            final name = svc['name'];
+                            if (name is String) return name;
+                          }
+                          return '–';
+                        }(),
                         icon: Icons.design_services,
                       ),
                       _buildDetailCard(
