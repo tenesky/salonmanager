@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../common/themed_background.dart';
+import '../../../services/auth_service.dart';
 
 /// Home page for customers. This screen shows a simple search field,
 /// a placeholder map section and a few recommended salons. It serves
@@ -198,7 +199,14 @@ class _HomePageState extends State<HomePage> {
                     side: BorderSide(color: theme.colorScheme.onSurface),
                   ),
                   onPressed: () {
-                    Navigator.of(context).pushNamed('/bookings');
+                    // Require the user to be authenticated before showing their bookings.
+                    // If not logged in, redirect to the login page first. Otherwise
+                    // navigate to the bookings list.
+                    if (!AuthService.isLoggedIn()) {
+                      Navigator.of(context).pushNamed('/login');
+                    } else {
+                      Navigator.of(context).pushNamed('/bookings');
+                    }
                   },
                   child: const Text('Meine Buchungen'),
                 ),

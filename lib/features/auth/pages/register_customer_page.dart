@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-
-// Import AuthService to handle customer registration and 2FA
 import '../../../services/auth_service.dart';
 
 /// Registration screen for new customers. This form collects minimal
@@ -17,14 +15,45 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  // Password controller is removed; OTP login does not require a password.
   bool _acceptMarketing = false;
+  bool _loading = false;
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     super.dispose();
+  }
+
+  Future<void> _register() async {
+    if (!_formKey.currentState!.validate()) return;
+    final email = _emailController.text.trim();
+    setState(() {
+      _loading = true;
+    });
+    try {
+      // Send an OTP to the provided email. Supabase will create a
+      // pending user account. Additional profile fields (name,
+      // acceptMarketing) can be stored later in the Supabase DB.
+      await AuthService.sendOtp(email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registrierungs-Code gesendet. Bitte prüfen Sie Ihre E-Mail.')),
+      );
+      // Pass the email to the 2FA page for code verification.
+      Navigator.of(context).pushNamed('/two-factor', arguments: {'email': email});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Fehler bei der Registrierung: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -65,15 +94,13 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
                   if (value == null || value.isEmpty) {
                     return 'Bitte geben Sie Ihre E‑Mail ein.';
                   }
-                  if (!value.contains('@')) {
+                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
                     return 'Ungültige E‑Mail‑Adresse.';
                   }
                   return null;
                 },
               ),
               const SizedBox(height: 16),
-              // No password field needed for OTP signup
-              const SizedBox(height: 0),
               Row(
                 children: [
                   Checkbox(
@@ -91,44 +118,20 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState!.validate()) {
-                    final name = _nameController.text.trim();
-                    final email = _emailController.text.trim();
-                    // Split the name into first and last name.  If only one
-                    // segment is provided it becomes the first name.
-                    final parts = name.split(' ');
-                    final firstName = parts.isNotEmpty ? parts.first : name;
-                    final lastName = parts.length > 1 ? parts.sublist(1).join(' ') : '';
-                    // Send an OTP to register and log in.  We ignore the
-                    // first/last name for now; they can be stored in the
-                    // profile table after verification.
-                    AuthService()
-                        .sendOtp(email: email)
-                        .then((_) {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Bestätigungscode gesendet')),
-                      );
-                      Navigator.of(context).pushReplacementNamed('/two-factor', arguments: {
-                        'email': email,
-                      });
-                    }).catchError((err) {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Fehler beim Senden des Codes: ${err.toString()}')),
-                      );
-                    });
-                  }
-                },
-                // In dunklen Themes soll der Button weiß sein mit schwarzer Schrift.
+                onPressed: _loading ? null : _register,
                 style: Theme.of(context).brightness == Brightness.dark
                     ? ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: Theme.of(context).colorScheme.primary,
                       )
                     : null,
-                child: const Text('Registrieren'),
+                child: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Registrieren'),
               ),
               const SizedBox(height: 16),
               TextButton(

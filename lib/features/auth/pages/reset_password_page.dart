@@ -37,10 +37,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Passwort zurücksetzen ist nicht erforderlich, da die Anmeldung per E‑Mail‑Code erfolgt. '
-                'Dieses Formular ist deaktiviert.',
-              ),
+              const Text('Geben Sie den Code und Ihr neues Passwort ein.'),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _codeController,
@@ -88,8 +85,15 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: null,
-                child: const Text('Zurücksetzen nicht verfügbar'),
+                onPressed: () {
+                  if (_formKey.currentState!.validate()) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Passwort wurde zurückgesetzt (Demo).')),
+                    );
+                    Navigator.of(context).pushReplacementNamed('/login');
+                  }
+                },
+                child: const Text('Passwort zurücksetzen'),
               ),
             ],
           ),

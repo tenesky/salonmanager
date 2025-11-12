@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-
-// Import the AuthService to verify the two‑factor code.  We use
-// a relative import to access lib/services/auth_service.dart.
 import '../../../services/auth_service.dart';
 
 /// A page that prompts the user to enter their two‑factor authentication
@@ -17,21 +14,25 @@ class TwoFactorPage extends StatefulWidget {
 
 class _TwoFactorPageState extends State<TwoFactorPage> {
   final TextEditingController _codeController = TextEditingController();
-
-  // The e‑mail address for which the 2FA code was generated.  This
-  // value is passed via the Navigator arguments when the user
-  // navigates from the login page.  We assign it in
-  // didChangeDependencies() once.
   String? _email;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Extract the e‑mail argument only once
+    // Retrieve the email passed via route arguments. This cannot be done in
+    // initState because ModalRoute depends on the context being fully
+    // initialised. Only assign if not already set to avoid overwriting
+    // on hot reload.
     if (_email == null) {
       final args = ModalRoute.of(context)?.settings.arguments;
-      if (args is Map && args.containsKey('email')) {
-        _email = args['email'] as String?;
+      if (args is Map<String, dynamic> && args['email'] is String) {
+        _email = args['email'] as String;
       }
     }
   }
@@ -42,11 +43,80 @@ class _TwoFactorPageState extends State<TwoFactorPage> {
     super.dispose();
   }
 
+  /// Resends the OTP to the stored email. If no email is known, shows
+  /// an error. The resend uses the same endpoint as the initial
+  /// request.
+  Future<void> _resendCode() async {
+    if (_email == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keine E-Mail-Adresse vorhanden.')),
+      );
+      return;
+    }
+    try {
+      await AuthService.sendOtp(_email!);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Code erneut gesendet.')),
+      );
+    } catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Fehler beim Senden des Codes: $error')),
+      );
+    }
+  }
+
+  /// Verifies the entered code using Supabase. On success, navigates
+  /// to the home page. On failure, shows an error message.
+  Future<void> _verifyCode() async {
+    if (_email == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keine E-Mail-Adresse vorhanden.')),
+      );
+      return;
+    }
+    final code = _codeController.text.trim();
+    if (code.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte Code eingeben.')),
+      );
+      return;
+    }
+    setState(() {
+      _loading = true;
+    });
+    try {
+      final success = await AuthService.verifyOtp(email: _email!, code: code);
+      if (success) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erfolgreich angemeldet.')),
+        );
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ungültiger Code.')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Fehler beim Überprüfen des Codes: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Zwei‑Faktor‑Authentifizierung'),
+        title: const Text('Code eingeben'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -70,22 +140,17 @@ class _TwoFactorPageState extends State<TwoFactorPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 TextButton(
-                  onPressed: () {
-                    // TODO: implement resend code
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Code erneut senden nicht implementiert')),
-                    );
-                  },
+                  onPressed: _resendCode,
                   child: const Text('Code erneut senden'),
                 ),
                 TextButton(
                   onPressed: () {
-                    // TODO: implement recovery link
+                    // Recovery link or other fallback flows could be implemented here.
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Recovery‑Link nicht implementiert')),
+                      const SnackBar(content: Text('Recovery-Link nicht verfügbar.')),
                     );
                   },
-                  child: const Text('Recovery‑Link'),
+                  child: const Text('Recovery-Link'),
                 ),
               ],
             ),
@@ -93,42 +158,14 @@ class _TwoFactorPageState extends State<TwoFactorPage> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  // Validate the input and verify the code via Supabase.
-                  final code = _codeController.text.trim();
-                  if (code.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Bitte Code eingeben')),
-                    );
-                    return;
-                  }
-                  final email = _email;
-                  if (email == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Unbekannte E‑Mail-Adresse. Bitte erneut einloggen.')),
-                    );
-                    Navigator.of(context).pop();
-                    return;
-                  }
-                  AuthService()
-                      .verifyOtp(email: email, code: code)
-                      .then((success) {
-                    if (!mounted) return;
-                    if (success) {
-                      Navigator.of(context).pushReplacementNamed('/home');
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Code ungültig')),
-                      );
-                    }
-                  }).catchError((err) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Fehler bei der Verifikation: ${err.toString()}')),
-                    );
-                  });
-                },
-                child: const Text('Weiter'),
+                onPressed: _loading ? null : _verifyCode,
+                child: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Weiter'),
               ),
             ),
           ],

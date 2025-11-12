@@ -1,25 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'app.dart';
 
 /// Entry point of the SalonManager Flutter application.
 ///
-/// This method initializes the Supabase client before running the app.
-/// Replace the `supabaseUrl` and `supabaseAnonKey` with your own
-/// Supabase project URL and anonymous public key. The initialization
-/// is asynchronous, so we ensure that Flutter bindings are ready
-/// before awaiting the call.
+/// Initializes the Supabase client before running the app. Supabase provides
+/// authentication, realtime database and Postgres access without the need
+/// for a dedicated backend. The URL and anon/publishable key must be
+/// replaced with your Supabase project details. You can find them in the
+/// Supabase Dashboard under Project Settings → API. Use the **public
+/// client key** (also called “anon” or “publishable” key) here; do not
+/// embed your service role key in the client. See documentation:
+/// https://supabase.com/docs/guides/with-flutter
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // TODO: Replace with your own Supabase credentials.  The URL
-  // should follow the pattern https://xxxx.supabase.co and the
-  // anonymous key can be found in your Supabase project settings.
-  const supabaseUrl = 'https://YOUR-PROJECT.supabase.co';
-  const supabaseAnonKey = 'YOUR-ANON-KEY';
+  // Initialize Supabase with the provided project URL and anon (publishable) key.
+  // These values are specific to your Supabase project and should be kept
+  // confidential. Do not include any service role key here.
   await Supabase.initialize(
-    url: supabaseUrl,
-    anonKey: supabaseAnonKey,
+    url: 'https://tojygtbhddmlgyilgcyj.supabase.co',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvanlndGJoZGRtbGd5aWxnY3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDA2MDksImV4cCI6MjA3ODQ3NjYwOX0.j0IoIRZZQfX_FS0lHd1xOpE5pUfEQ9lsKi5sX2vtIJg',
   );
   runApp(const MyApp());
 }

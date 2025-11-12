@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-// Import AuthService to enforce login before starting the booking wizard.
 import '../../../services/auth_service.dart';
 
 /// First step of the booking wizard: select a salon. This screen
@@ -94,7 +92,21 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
   @override
   void initState() {
     super.initState();
-    _loadDraftSalonId();
+    _checkAuthAndLoad();
+  }
+
+  /// Checks whether the user is authenticated via Supabase. If not,
+  /// redirects to the login page. Otherwise proceeds to load any stored
+  /// draft salon ID.
+  void _checkAuthAndLoad() {
+    // Defer navigation until after the first frame to avoid build errors.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!AuthService.isLoggedIn()) {
+        Navigator.of(context).pushNamed('/login');
+      } else {
+        _loadDraftSalonId();
+      }
+    });
   }
 
   @override
@@ -367,21 +379,9 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
         child: ElevatedButton(
           onPressed: _selectedSalonId != null
               ? () {
-                  // Before proceeding, check whether the user is logged in.
-                  final isLoggedIn = AuthService().isLoggedIn;
-                  if (isLoggedIn) {
-                    // The user is authenticated; proceed to the next step.
-                    Navigator.of(context).pushNamed('/booking/select-service');
-                  } else {
-                    // Not logged in – prompt the user and redirect to login.
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Bitte anmelden oder registrieren, um eine Buchung zu starten.'),
-                      ),
-                    );
-                    Navigator.of(context).pushNamed('/login');
-                  }
+                  // Navigate to the next step of the booking wizard. For
+                  // now this is a placeholder route.
+                  Navigator.of(context).pushNamed('/booking/select-service');
                 }
               : null,
           child: const Text('Weiter'),
