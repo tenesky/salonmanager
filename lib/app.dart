@@ -55,7 +55,16 @@ import 'features/staff/pages/service_setup_page.dart';
 // with columns per stylist and supports drag‑and‑drop to move bookings,
 // matching Screen 36 of the calendar module【73678961014422†L1528-L1532】.
 import 'features/calendar/pages/day_calendar_page.dart';
+import 'features/calendar/pages/week_calendar_page.dart';
 import 'features/calendar/pages/month_calendar_page.dart';
+// Import the schedule board page. This page shows a drag‑and‑drop
+// shift plan with rows per stylist and columns per day. Managers can
+// add, move, duplicate or delete shifts on this board.
+import 'features/schedule/pages/board_page.dart';
+// Import the shift swap page. This screen allows stylists to
+// request shift swaps with colleagues and managers to review
+// requests.
+import 'features/schedule/pages/swap_page.dart';
 import 'features/booking/pages/booking_professional_detail_page.dart';
 import 'features/settings/pages/notification_settings_page.dart';
 
@@ -182,10 +191,24 @@ class MyApp extends StatelessWidget {
         // timeline with one column per stylist and supports drag‑&‑drop
         // rescheduling and a floating action button to create new bookings.
         '/calendar/day': (context) => const DayCalendarPage(),
+        '/calendar/week': (context) => const WeekCalendarPage(),
         // Route to the monthly calendar. This screen shows a month grid
         // with mini‑dots per day to represent appointments per stylist and
         // opens a modal day view when tapped (Screen 38)【73678961014422†L1528-L1532】.
         '/calendar/month': (context) => const MonthCalendarPage(),
+        // Route to the shift plan (Dienstplan). This screen presents a
+        // drag‑and‑drop board with rows per stylist and columns per day
+        // of the current week. Shifts appear as coloured blocks that
+        // managers can reposition, duplicate or delete. Overlapping
+        // shifts display a warning icon. This implements Screen 39 of
+        // the schedule module.
+        '/schedule/board': (context) => const ScheduleBoardPage(),
+        // Route to the shift swap screen. This page displays a list of
+        // the current user's shifts with a button to request a swap. A
+        // dialog prompts for a target stylist and an optional message.
+        // Managers see a list of pending requests and can approve or
+        // decline them. Implements Screen 40 of the schedule module.
+        '/schedule/swap': (context) => const ShiftSwapPage(),
         // Route used for demo login. Without a backend this simply opens the
         // Home page to allow testing of navigation and UI flows without
         // authentication.

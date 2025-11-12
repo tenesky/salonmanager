@@ -45,6 +45,13 @@ class AuthService {
     return _client.auth.currentSession != null;
   }
 
+  /// Returns the current user's email address if logged in, otherwise null.
+  /// This can be used to display the user's email in the UI (e.g. in an
+  /// Account screen) without directly accessing the Supabase client.
+  static String? currentUserEmail() {
+    return _client.auth.currentUser?.email;
+  }
+
   /// Logs out the current user by revoking the session. Throws an
   /// exception if the sign‑out fails.
   static Future<void> logout() async {

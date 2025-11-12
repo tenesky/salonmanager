@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../services/auth_service.dart';
 
 /// A page that shows a list of the user's bookings.
 ///
@@ -26,7 +27,16 @@ class _BookingsListPageState extends State<BookingsListPage> {
   @override
   void initState() {
     super.initState();
-    _loadBookings();
+    // Defer navigation until after the first frame. If the user is not
+    // authenticated, redirect them to the login page. Otherwise, load
+    // the stored bookings from shared preferences.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!AuthService.isLoggedIn()) {
+        Navigator.of(context).pushNamed('/login');
+      } else {
+        _loadBookings();
+      }
+    });
   }
 
   Future<void> _loadBookings() async {

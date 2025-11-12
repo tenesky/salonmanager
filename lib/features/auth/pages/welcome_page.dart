@@ -58,8 +58,16 @@ class WelcomePage extends StatelessWidget {
               // the provided SalonManager branding and contains the
               // scissors and "S" motif as well as the brand name. The tagline
               // appears below the image.
+              // Display a different logo depending on the current brightness
+              // of the theme. When the app is in dark mode a version of the
+              // logo with a dark background is shown; otherwise the light
+              // variant is used.  The images are stored in the `assets` folder
+              // and declared in pubspec.yaml.  A fixed height is applied
+              // to ensure consistent layout across devices.
               Image.asset(
-                'assets/logo_full.png',
+                Theme.of(context).brightness == Brightness.dark
+                    ? 'assets/login_dark.png'
+                    : 'assets/login_light.png',
                 height: 200,
                 fit: BoxFit.contain,
               ),
