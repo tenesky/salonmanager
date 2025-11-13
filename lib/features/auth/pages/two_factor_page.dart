@@ -54,7 +54,9 @@ class _TwoFactorPageState extends State<TwoFactorPage> {
       return;
     }
     try {
-      await AuthService.sendOtp(_email!);
+      // Resend the code to the existing user. We use the dedicated
+      // method to avoid creating a new user record.
+      await AuthService.sendOtpForExistingUser(_email!);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Code erneut gesendet.')),
       );

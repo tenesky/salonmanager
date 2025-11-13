@@ -36,13 +36,10 @@ class AuthService {
 
   /// Sends a one‑time password (OTP) email to an existing user. This
   /// triggers Supabase to send an email containing a 6‑digit code. The
-  /// [shouldCreateUser] option is set to false to ensure a new user
+  /// parameter `shouldCreateUser` is set to `false` to ensure a new user
   /// record is not created when sending the OTP after sign‑up or sign‑in.
   static Future<void> sendOtpForExistingUser(String email) async {
-    await _client.auth.signInWithOtp(
-      email: email,
-      options: const AuthOtpOptions(shouldCreateUser: false),
-    );
+    await _client.auth.signInWithOtp(email: email, shouldCreateUser: false);
   }
 
   /// Verifies a one‑time password for the given email address. Returns
