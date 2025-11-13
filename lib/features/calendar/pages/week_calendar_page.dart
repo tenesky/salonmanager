@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:salonmanager/services/db_service.dart';
+import 'package:intl/intl.dart';
 
 /// Represents a booking in the weekly calendar.  Reuses the same structure
 /// as in the daily calendar for simplicity.  Each booking has a client

@@ -43,7 +43,7 @@ class DbService {
     String sortBy = 'name',
     bool ascending = true,
   }) async {
-    var query = _client.from('customers').select(
+    dynamic query = _client.from('customers').select(
         'id, name, last_visit_date, no_show_count, is_regular');
     if (regular == true) {
       query = query.eq('is_regular', true);
@@ -147,7 +147,7 @@ class DbService {
     if (response.error != null) {
       throw response.error!;
     }
-    final data = response.data;
+    final Map<String, dynamic> data = Map<String, dynamic>.from(response.data ?? {});
     return data['id'] as int;
   }
 
@@ -419,7 +419,7 @@ class DbService {
     if (response.error != null) {
       throw response.error!;
     }
-    final data = response.data;
+    final Map<String, dynamic> data = Map<String, dynamic>.from(response.data ?? {});
     return data['id'] as int;
   }
 
@@ -479,7 +479,7 @@ class DbService {
     double? minRating,
     bool onlyFree = false,
   }) async {
-    var query = _client.from('salons').select(
+    dynamic query = _client.from('salons').select(
         'id, name, rating, price_level, next_slot, has_free, latitude, longitude');
     // Apply filters
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
@@ -719,7 +719,7 @@ class DbService {
     if (response.error != null) {
       throw response.error!;
     }
-    final data = response.data;
+    final Map<String, dynamic> data = Map<String, dynamic>.from(response.data ?? {});
     return data['id'] as int;
   }
 
@@ -744,7 +744,7 @@ class DbService {
     if (response.error != null) {
       throw response.error!;
     }
-    final data = response.data;
+    final Map<String, dynamic> data = Map<String, dynamic>.from(response.data ?? {});
     return data['id'] as int;
   }
 
@@ -1035,7 +1035,7 @@ class DbService {
         DateTime? end,
         String? search,
       }) async {
-    var query = _client
+    dynamic query = _client
         .from('bookings')
         .select('id, start_datetime, duration, price, status, services(name), stylists(name)')
         .eq('customer_id', customerId);
