@@ -107,6 +107,15 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Home'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Suche',
+            onPressed: () {
+              Navigator.of(context).pushNamed('/search');
+            },
+          ),
+        ],
       ),
       body: ThemedBackground(
         child: SingleChildScrollView(

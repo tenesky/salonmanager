@@ -13,6 +13,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// personal data. Once the notes and images are provided the
 /// customer can continue to the payment step. This screen implements
 /// parts of the specification for Wizard 6【522868310347694†L161-L167】.
+//
+// Supabase Note:
+//
+// The images selected on this page are kept locally until the
+// booking is finalised. When the user completes the wizard, the
+// selected files can be uploaded to Supabase storage and a record
+// created in the `booking_images` table with the `booking_id` and
+// the returned `image_url`. For now we only persist the file
+// paths in SharedPreferences under the key `draft_image_paths`. This
+// allows subsequent wizard steps to preview the images and include
+// them in the summary. Once uploaded, all team members will have
+// access to the images via Supabase.
 class BookingAdditionalInfoPage extends StatefulWidget {
   const BookingAdditionalInfoPage({Key? key}) : super(key: key);
 

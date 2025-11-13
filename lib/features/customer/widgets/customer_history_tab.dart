@@ -63,7 +63,12 @@ class _CustomerHistoryTabState extends State<CustomerHistoryTab> {
         } else {
           dt = DateTime.now();
         }
-        // Extract service and stylist names from nested objects
+        // Extract service and stylist names from nested objects.  The
+        // Supabase response embeds the `services` and `stylists` relations
+        // as maps.  Since bookings currently do not include a
+        // `salon_id` the salon name cannot be resolved from the API.
+        // Therefore we set a placeholder for `salon_name` which can be
+        // replaced once the schema supports it.
         final dynamic service = row['services'];
         final dynamic stylist = row['stylists'];
         final String serviceName = service is Map<String, dynamic>
@@ -78,6 +83,10 @@ class _CustomerHistoryTabState extends State<CustomerHistoryTab> {
           'date': dt,
           'service_name': serviceName,
           'stylist_name': stylistName,
+          // Placeholder until bookings include a salon reference.  This
+          // field could be populated by joining bookings via stylist
+          // membership tables in a future iteration.
+          'salon_name': '-',
           'revenue': row['price'],
         });
       }
@@ -235,7 +244,7 @@ class _CustomerHistoryTabState extends State<CustomerHistoryTab> {
                           return Card(
                             child: ListTile(
                               title: Text(entry['service_name'] as String),
-                              subtitle: Text('${entry['stylist_name']}\n$dateStr $timeStr'),
+                              subtitle: Text('${entry['salon_name']} · ${entry['stylist_name']}\n$dateStr $timeStr'),
                               trailing: Text('${entry['revenue']} €'),
                               isThreeLine: true,
                               onTap: () {
@@ -251,6 +260,7 @@ class _CustomerHistoryTabState extends State<CustomerHistoryTab> {
                                         children: [
                                           Text('Datum: $dateStr'),
                                           Text('Uhrzeit: $timeStr'),
+                                          Text('Salon: ${entry['salon_name']}'),
                                           Text('Stylist: ${entry['stylist_name']}'),
                                           Text('Umsatz: ${entry['revenue']} €'),
                                         ],

@@ -67,10 +67,12 @@ class DbService {
   /// Fetches a single customer by [id].  Returns `null` if no
   /// matching record is found.
   static Future<Map<String, dynamic>?> getCustomerById(int id) async {
+    // Fetch the customer record.  Include marketing_opt_in so that
+    // the contact/opt-in tab can display the current opt-in status.
     final response = await _client
         .from('customers')
         .select(
-            'id, name, email, phone, photo_url, last_visit_date, is_regular, no_show_count')
+            'id, name, email, phone, photo_url, last_visit_date, is_regular, no_show_count, marketing_opt_in')
         .eq('id', id)
         .single()
         .execute();
@@ -179,6 +181,95 @@ class DbService {
     }
   }
 
+  /// Updates contact details for a customer.  Any of the fields
+  /// [email], [phone] or [marketingOptIn] may be provided.  Fields
+  /// that are null are not modified.  Throws an error if the update
+  /// fails.
+  static Future<void> updateCustomerContact({
+    required int id,
+    String? email,
+    String? phone,
+    bool? marketingOptIn,
+  }) async {
+    final Map<String, dynamic> updateData = {};
+    if (email != null) {
+      updateData['email'] = email;
+    }
+    if (phone != null) {
+      updateData['phone'] = phone;
+    }
+    if (marketingOptIn != null) {
+      updateData['marketing_opt_in'] = marketingOptIn;
+    }
+    if (updateData.isEmpty) {
+      return;
+    }
+    final response = await _client
+        .from('customers')
+        .update(updateData)
+        .eq('id', id)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Creates a transaction record along with optional transaction items.
+  /// Returns the newly created transaction id. The [paymentMethod] must
+  /// be one of 'cash', 'card' or 'wallet'. The [items] list may
+  /// contain maps with keys `product_id`, `service_id`, `name`,
+  /// `quantity`, `unit_price` and `total_price`. Items are inserted
+  /// into the `transaction_items` table after the transaction is
+  /// created. If insertion fails, the error is propagated.
+  static Future<int> createTransaction({
+    required String paymentMethod,
+    required num totalAmount,
+    int? customerId,
+    String? salonId,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    // Insert the transaction and get its id
+    final txResponse = await _client
+        .from('transactions')
+        .insert({
+          if (salonId != null) 'salon_id': salonId,
+          if (customerId != null) 'customer_id': customerId,
+          'total_amount': totalAmount,
+          'payment_method': paymentMethod,
+        })
+        .select('id')
+        .single()
+        .execute();
+    if (txResponse.error != null) {
+      throw txResponse.error!;
+    }
+    final txData = txResponse.data as Map<String, dynamic>?;
+    if (txData == null || !txData.containsKey('id')) {
+      throw Exception('Transaction ID missing');
+    }
+    final int transactionId = txData['id'] as int;
+    // Insert transaction items if any
+    for (final item in items) {
+      final Map<String, dynamic> itemRow = {
+        'transaction_id': transactionId,
+        'name': item['name'],
+        'quantity': item['quantity'],
+        'unit_price': item['unit_price'],
+        'total_price': item['total_price'],
+        'product_id': item['product_id'],
+        'service_id': item['service_id'],
+      };
+      final itemResponse = await _client
+          .from('transaction_items')
+          .insert(itemRow)
+          .execute();
+      if (itemResponse.error != null) {
+        throw itemResponse.error!;
+      }
+    }
+    return transactionId;
+  }
+
   /// Returns the list of services available in the salon.  Fields
   /// include `id`, `name`, `duration`, `price` and `description`.
   static Future<List<Map<String, dynamic>>> getServices() async {
@@ -187,6 +278,33 @@ class DbService {
         .select()
         .order('id')
         .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  /// Retrieves products from the database with optional search and category
+  /// filtering. Returns a list of maps with keys `id`, `name`, `sku`,
+  /// `category`, `price` and `quantity`. Results are ordered by
+  /// [sortBy] (default `name`).
+  static Future<List<Map<String, dynamic>>> getProducts({
+    String? searchQuery,
+    String? categoryFilter,
+    String sortBy = 'name',
+    bool ascending = true,
+  }) async {
+    dynamic query = _client.from('products').select('id, name, sku, category, price, quantity');
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      final sanitized = searchQuery.trim();
+      query = query.ilike('name', '%$sanitized%');
+    }
+    if (categoryFilter != null && categoryFilter.isNotEmpty) {
+      query = query.eq('category', categoryFilter);
+    }
+    query = query.order(sortBy, ascending: ascending);
+    final response = await query.execute();
     if (response.error != null) {
       throw response.error!;
     }

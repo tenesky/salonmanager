@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../widgets/customer_history_tab.dart';
 import '../widgets/customer_notes_tab.dart';
+import '../widgets/customer_contact_tab.dart';
 import 'package:salonmanager/services/db_service.dart';
 
 /// Page displaying a customer's profile with tabs for history, notes and images.
@@ -31,7 +32,7 @@ class _CustomerProfilePageState extends State<CustomerProfilePage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadCustomer();
   }
 
@@ -67,6 +68,8 @@ class _CustomerProfilePageState extends State<CustomerProfilePage>
             'last_visit_date': lastVisit,
             'is_regular': row['is_regular'] == true || row['is_regular'] == 1,
             'no_show_count': row['no_show_count'] ?? 0,
+            // Ensure we capture the marketing opt‑in flag for the contact tab.
+            'marketing_opt_in': row['marketing_opt_in'] == true || row['marketing_opt_in'] == 1,
           };
         });
       }
@@ -100,6 +103,7 @@ class _CustomerProfilePageState extends State<CustomerProfilePage>
                         Tab(text: 'Historie'),
                         Tab(text: 'Notizen'),
                         Tab(text: 'Bilder'),
+                        Tab(text: 'Kontakt & Opt‑ins'),
                       ],
                     ),
                     // Tab views for content
@@ -110,6 +114,7 @@ class _CustomerProfilePageState extends State<CustomerProfilePage>
                           _buildHistoryTab(),
                           _buildNotesTab(),
                           _buildImagesTab(),
+                            _buildContactTab(),
                         ],
                       ),
                     ),
@@ -238,6 +243,24 @@ class _CustomerProfilePageState extends State<CustomerProfilePage>
   Widget _buildImagesTab() {
     return const Center(
       child: Text('Bilder werden hier angezeigt.'),
+    );
+  }
+
+  /// Builds the contact & opt‑ins tab.  This tab allows the user
+  /// to edit their e‑mail, phone number and marketing opt‑in.  The
+  /// current values are provided from the loaded customer object.  If
+  /// the customer data has not yet been loaded, an empty placeholder
+  /// is shown.
+  Widget _buildContactTab() {
+    final customer = _customer;
+    if (customer == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return CustomerContactTab(
+      customerId: customer['id'] as int,
+      initialEmail: customer['email'] as String?,
+      initialPhone: customer['phone'] as String?,
+      initialMarketingOptIn: customer['marketing_opt_in'] as bool? ?? false,
     );
   }
 }

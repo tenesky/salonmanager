@@ -112,52 +112,140 @@ class _SalonsMapPageState extends State<SalonsMapPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Salons auf der Karte'),
-      ),
-      body: FlutterMap(
-        options: MapOptions(
-          center: _mapCenter,
-          zoom: 14.0,
-          minZoom: 5,
-          maxZoom: 18,
-        ),
-        children: [
-          TileLayer(
-            urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            subdomains: const ['a', 'b', 'c'],
-            userAgentPackageName: 'com.example.salonmanager',
+        actions: [
+          // Optional filter button in the AppBar to open the filter drawer
+          IconButton(
+            icon: const Icon(Icons.filter_list),
+            tooltip: 'Filter',
+            onPressed: _openFilterSheet,
           ),
-        MarkerLayer(
-          // Explicitly type the list to List<Marker> so that Flutter
-          // understands we are returning a list of Marker objects. The
-          // `child` parameter replaces the old `builder` parameter in
-          // newer versions of flutter_map (>=6.x).
-          markers: _filteredSalons.map<Marker>((salon) {
-            return Marker(
-              point: salon.location,
-              width: 40,
-              height: 40,
-              child: GestureDetector(
-                onTap: () => _showSalonDetails(salon),
-                child: Icon(
-                  Icons.location_on,
-                  size: 40,
-                  color: theme.brightness == Brightness.dark
-                      ? Colors.amber.shade400
-                      : Colors.amber.shade700,
-                ),
-              ),
-            );
-          }).toList(),
-        ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openFilterSheet,
-        tooltip: 'Filter',
-        child: const Icon(Icons.filter_list),
+      // Use a Stack so that we can overlay filter chips on top of the map.
+      body: Stack(
+        children: [
+          FlutterMap(
+            options: MapOptions(
+              center: _mapCenter,
+              zoom: 14.0,
+              minZoom: 5,
+              maxZoom: 18,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                subdomains: const ['a', 'b', 'c'],
+                userAgentPackageName: 'com.example.salonmanager',
+              ),
+              MarkerLayer(
+                markers: _filteredSalons.map<Marker>((salon) {
+                  return Marker(
+                    point: salon.location,
+                    width: 40,
+                    height: 40,
+                    child: GestureDetector(
+                      onTap: () => _showSalonDetails(salon),
+                      child: Icon(
+                        Icons.location_on,
+                        size: 40,
+                        color: theme.brightness == Brightness.dark
+                            ? Colors.amber.shade400
+                            : Colors.amber.shade700,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+          // Positioned filter chips above the map. This row shows the
+          // current filter selections. Tapping on distance, price or
+          // rating chips opens the detailed filter sheet. The “nur
+          // freie Termine” chip toggles immediately.
+          Positioned(
+            top: 8,
+            left: 8,
+            right: 8,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Wrap(
+                spacing: 8.0,
+                children: [
+                  // Distance chip
+                  FilterChip(
+                    label: Text('Entfernung: ${_maxDistance.toStringAsFixed(0)} km'),
+                    selected: true,
+                    onSelected: (_) => _openFilterSheet(),
+                  ),
+                  // Price level chip
+                  FilterChip(
+                    label: Text(_selectedPriceLevels.isEmpty
+                        ? 'Preislevel'
+                        : _selectedPriceLevels.join(', ')),
+                    selected: _selectedPriceLevels.isNotEmpty,
+                    onSelected: (_) => _openFilterSheet(),
+                  ),
+                  // Rating chip
+                  FilterChip(
+                    label: Text('Bewertung: ${_minRating.toStringAsFixed(1)}+'),
+                    selected: _minRating > 0,
+                    onSelected: (_) => _openFilterSheet(),
+                  ),
+                  // Only free appointments chip toggles directly
+                  FilterChip(
+                    label: const Text('Nur freie Termine'),
+                    selected: _onlyFree,
+                    onSelected: (_) {
+                      setState(() => _onlyFree = !_onlyFree);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
+
+  /// Builds a row of filter chips that reflect the current filter
+  /// selections. This helper could be extended to support more
+  /// granular control or to open a dedicated filter drawer. Currently,
+  /// distance, price level and rating chips open the bottom sheet,
+  /// while the "Nur freie Termine" chip toggles the boolean flag
+  /// directly.
+  // Widget _buildFilterChips() {
+  //   return SingleChildScrollView(
+  //     scrollDirection: Axis.horizontal,
+  //     child: Wrap(
+  //       spacing: 8.0,
+  //       children: [
+  //         FilterChip(
+  //           label: Text('Entfernung: ${_maxDistance.toStringAsFixed(0)} km'),
+  //           selected: true,
+  //           onSelected: (_) => _openFilterSheet(),
+  //         ),
+  //         FilterChip(
+  //           label: Text(_selectedPriceLevels.isEmpty ? 'Preislevel' : _selectedPriceLevels.join(', ')),
+  //           selected: _selectedPriceLevels.isNotEmpty,
+  //           onSelected: (_) => _openFilterSheet(),
+  //         ),
+  //         FilterChip(
+  //           label: Text('Bewertung: ${_minRating.toStringAsFixed(1)}+'),
+  //           selected: _minRating > 0,
+  //           onSelected: (_) => _openFilterSheet(),
+  //         ),
+  //         FilterChip(
+  //           label: const Text('Nur freie Termine'),
+  //           selected: _onlyFree,
+  //           onSelected: (_) {
+  //             setState(() => _onlyFree = !_onlyFree);
+  //           },
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   /// Opens a bottom sheet with filtering options. When the user taps
   /// “Anwenden”, the filter selections are stored in the state and

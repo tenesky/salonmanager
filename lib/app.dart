@@ -14,6 +14,7 @@ import 'features/auth/pages/reset_password_page.dart';
 import 'features/home/pages/home_page.dart';
 import 'features/salon/pages/salon_list_page.dart';
 import 'features/salon/pages/salon_detail_page.dart';
+import 'features/salon/pages/salon_apply_page.dart';
 import 'features/salon/models/salon.dart';
 import 'features/onboarding/pages/onboarding_customer_page.dart';
 import 'features/onboarding/pages/onboarding_salon_page.dart';
@@ -59,6 +60,12 @@ import 'features/staff/pages/assign_services_page.dart';
 import 'features/customer/pages/customer_list_page.dart';
 import 'features/customer/pages/customer_profile_page.dart';
 import 'features/settings/pages/impressum_page.dart';
+// Inventory pages
+import 'features/inventory/pages/product_list_page.dart';
+import 'features/search/pages/global_search_page.dart';
+// Gallery pages
+import 'features/gallery/pages/gallery_page.dart';
+import 'features/gallery/pages/gallery_detail_page.dart';
 // Import day calendar page for daily schedule. This page displays a timeline
 // with columns per stylist and supports drag‑and‑drop to move bookings,
 // matching Screen 36 of the calendar module【73678961014422†L1528-L1532】.
@@ -82,6 +89,7 @@ import 'features/schedule/pages/leave_page.dart';
 import 'features/schedule/pages/timesheet_page.dart';
 import 'features/booking/pages/booking_professional_detail_page.dart';
 import 'features/settings/pages/notification_settings_page.dart';
+import 'features/pos/pages/pos_page.dart';
 
 // Import theme
 import 'core/theme.dart';
@@ -133,6 +141,16 @@ class MyApp extends StatelessWidget {
           );
           return SalonDetailPage(salon: salon);
         },
+        // Route for salon applications. Salon owners can submit their
+        // business for approval using a form. After submission a
+        // confirmation message is shown. The actual record creation
+        // happens server‑side (table `salon_applications`).
+        '/salons/apply': (context) => const SalonApplyPage(),
+        // Inventory product list page. Shows a simple table of products with
+        // search and category filters.
+        '/inventory/products': (context) => const ProductListPage(),
+        // Global search page showing results in tabs for salons, services and stylists.
+        '/search': (context) => const GlobalSearchPage(),
         '/onboarding-customer': (context) => const OnboardingCustomerPage(),
         '/onboarding-salon': (context) => const OnboardingSalonPage(),
         // Interactive map view. Users can explore salons on a map and
@@ -288,6 +306,16 @@ class MyApp extends StatelessWidget {
         // Home page to allow testing of navigation and UI flows without
         // authentication.
         '/demo': (context) => const HomePage(),
+        // Point‑of‑Sale (Kasse) route. This page allows selecting
+        // customers, adding services/products to a cart and completing
+        // transactions. Implements Screen 76 of the POS module.
+        '/pos': (context) => const PosPage(),
+        // Public gallery routes. The main gallery shows a grid of
+        // images with filters; the detail page displays a larger view
+        // and allows booking. These implement Screens 59–61 of the
+        // gallery module.
+        '/gallery': (context) => const GalleryPage(),
+        '/gallery/detail': (context) => const GalleryDetailPage(),
       },
     );
   }
