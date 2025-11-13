@@ -26,6 +26,9 @@
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+	<!-- Specify the name of the asset catalog that contains the app icons. -->
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>UISupportedInterfaceOrientations</key>
