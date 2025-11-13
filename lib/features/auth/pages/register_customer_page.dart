@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../../services/auth_service.dart';
 
-/// Registration screen for new customers. This form collects minimal
-/// information required to create an account. Additional fields can be
-/// added as needed. Validation logic is kept simple for demonstration.
+/// Registration screen for new customers.
+///
+/// This form collects first name, last name, email and password.  After
+/// sign‑up an OTP is sent via email to complete two‑factor
+/// authentication.  Additional fields (e.g. marketing opt‑in) can be
+/// easily added.
 class RegisterCustomerPage extends StatefulWidget {
   const RegisterCustomerPage({Key? key}) : super(key: key);
 
@@ -13,7 +16,8 @@ class RegisterCustomerPage extends StatefulWidget {
 
 class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
@@ -22,7 +26,8 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -37,19 +42,15 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
       _loading = true;
     });
     try {
-      // First sign up with email and password. This creates the user in
-      // Supabase Auth. If the email is already registered or invalid,
-      // this call will throw an AuthException.
+      // Create the user in Supabase Auth using email/password.  Names are
+      // collected but not yet stored on the backend.  Role assignment
+      // happens server‑side.
       await AuthService.signUpWithPassword(email: email, password: password);
-      // Immediately send a one‑time code to the newly registered user to
-      // complete 2FA. Setting shouldCreateUser to false ensures we
-      // don’t accidentally create another user record.
       await AuthService.sendOtpForExistingUser(email);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Registrierungs‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
       );
-      // Pass the email to the 2FA page for code verification.
       Navigator.of(context).pushNamed('/two-factor', arguments: {'email': email});
     } catch (error) {
       if (!mounted) return;
@@ -79,14 +80,28 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextFormField(
-                controller: _nameController,
+                controller: _firstNameController,
                 decoration: const InputDecoration(
-                  labelText: 'Name',
+                  labelText: 'Vorname',
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Bitte geben Sie Ihren Namen ein.';
+                    return 'Bitte geben Sie Ihren Vornamen ein.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _lastNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Nachname',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Bitte geben Sie Ihren Nachnamen ein.';
                   }
                   return null;
                 },

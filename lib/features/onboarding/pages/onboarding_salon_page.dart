@@ -9,12 +9,15 @@ import '../../../common/themed_background.dart';
 
 /// Onboarding screen for salon owners.
 ///
-/// This page allows a new salon owner to customise their branding. The owner
-/// can upload a logo, choose primary and accent colours and reorder layout
-/// blocks. A live preview of the selected options is shown. When the user
-/// completes the onboarding, the preferences are stored locally using
-/// [SharedPreferences] and the app navigates to the home page. In a full
-/// implementation, these values would be persisted to the backend.
+/// This page allows a new salon owner to customise their branding and
+/// salon details.  The owner can upload a logo, choose primary and
+/// accent colours, specify the salon name and opening hours and decide
+/// whether to use default legal texts or provide their own.  The
+/// order of layout blocks can be adjusted and a live preview shows the
+/// current selections.  When the user completes the onboarding, the
+/// preferences are stored locally using [SharedPreferences] and the
+/// app navigates to the home page. In a full implementation, these
+/// values would also be persisted to Supabase.
 class OnboardingSalonPage extends StatefulWidget {
   const OnboardingSalonPage({Key? key}) : super(key: key);
 
@@ -26,8 +29,8 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
   Uint8List? _logoBytes;
   final ImagePicker _picker = ImagePicker();
 
-  // Define a few colour options for primary and accent colours. The first entry
-  // in each list is the default (Schwarz for primary and Gold for accent).
+  // Colour options for primary and accent colours.  The first entry is
+  // the default (Schwarz for primary and Gold for accent).
   final List<Color> _primaryOptions = [
     const Color(0xFF000000), // Schwarz
     const Color(0xFF212121),
@@ -57,10 +60,24 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
   final List<String> _blockOptions = const ['Hero', 'Services', 'Team', 'Gallery'];
   late List<String> _blockOrder;
 
+  // Controllers for additional salon details.
+  final TextEditingController _salonNameController = TextEditingController();
+  final TextEditingController _openingHoursController = TextEditingController();
+  final TextEditingController _legalTextController = TextEditingController();
+  bool _useDefaultLegalText = true;
+
   @override
   void initState() {
     super.initState();
     _blockOrder = List<String>.from(_blockOptions);
+  }
+
+  @override
+  void dispose() {
+    _salonNameController.dispose();
+    _openingHoursController.dispose();
+    _legalTextController.dispose();
+    super.dispose();
   }
 
   /// Pick an image from the device gallery for the logo. The selected
@@ -75,12 +92,19 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
     }
   }
 
-  /// Persist the branding selections to local storage.
+  /// Persist the branding and salon details to local storage.  Each
+  /// value is saved under its own key.  The colour values are saved
+  /// as hexadecimal strings.  If a logo was uploaded its bytes are
+  /// base64‑encoded.
   Future<void> _saveBranding() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('onboardingSalon.primaryColor', _primaryColor.value.toRadixString(16));
     await prefs.setString('onboardingSalon.accentColor', _accentColor.value.toRadixString(16));
     await prefs.setStringList('onboardingSalon.blockOrder', _blockOrder);
+    await prefs.setString('onboardingSalon.salonName', _salonNameController.text.trim());
+    await prefs.setString('onboardingSalon.openingHours', _openingHoursController.text.trim());
+    await prefs.setBool('onboardingSalon.useDefaultLegalText', _useDefaultLegalText);
+    await prefs.setString('onboardingSalon.legalText', _legalTextController.text.trim());
     if (_logoBytes != null) {
       final encoded = base64Encode(_logoBytes!);
       await prefs.setString('onboardingSalon.logo', encoded);
@@ -113,7 +137,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Lade dein Logo hoch, wähle Farben und ordne die Elemente deiner Salon‑Seite. Du siehst sofort eine Vorschau.',
+                'Lade dein Logo hoch, wähle Farben und ordne die Elemente deiner Salon‑Seite. Du kannst auch den Namen, Öffnungszeiten und Rechtstexte anpassen. Eine Vorschau zeigt dir sofort das Ergebnis.',
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: 24),
@@ -228,6 +252,50 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                 }),
               ),
               const SizedBox(height: 24),
+              // Salon details section
+              Text('Salon‑Details', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _salonNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Salon‑Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _openingHoursController,
+                decoration: const InputDecoration(
+                  labelText: 'Öffnungszeiten',
+                  hintText: 'z.B. Mo–Sa 09:00–18:00',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                title: const Text('Standard‑Rechtstexte verwenden'),
+                subtitle: const Text('Wenn deaktiviert, kannst du eigene Texte eingeben.'),
+                value: _useDefaultLegalText,
+                onChanged: (val) {
+                  setState(() {
+                    _useDefaultLegalText = val;
+                    if (val) {
+                      _legalTextController.clear();
+                    }
+                  });
+                },
+              ),
+              if (!_useDefaultLegalText)
+                TextField(
+                  controller: _legalTextController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Eigene Rechtstexte',
+                    hintText: 'Impressum, AGB, Datenschutz …',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              if (!_useDefaultLegalText) const SizedBox(height: 24),
               // Layout order section
               Text('Layout‑Blöcke (Reihenfolge ändern)', style: theme.textTheme.titleMedium),
               const SizedBox(height: 8),
@@ -274,6 +342,30 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                         alignment: Alignment.centerLeft,
                         child: Image.memory(_logoBytes!, height: 50),
                       ),
+                    if (_salonNameController.text.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Text(
+                          _salonNameController.text,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: _primaryColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                          ),
+                        ),
+                      ),
+                    if (_openingHoursController.text.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2.0),
+                        child: Text(
+                          _openingHoursController.text,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: _primaryColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 4),
                     for (final block in _blockOrder)
                       Container(
                         margin: const EdgeInsets.symmetric(vertical: 4.0),
@@ -287,9 +379,34 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                         child: Text(
                           block,
                           style: TextStyle(
-                            color: _primaryColor.computeLuminance() > 0.5
-                                ? Colors.black
-                                : Colors.white,
+                            color: _primaryColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    if (!_useDefaultLegalText && _legalTextController.text.trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Text(
+                          _legalTextController.text.trim().length > 60
+                              ? _legalTextController.text.trim().substring(0, 60) + '…'
+                              : _legalTextController.text.trim(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: _primaryColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                          ),
+                        ),
+                      )
+                    else if (_useDefaultLegalText)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Text(
+                          'Standard‑Rechtstexte werden verwendet',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: _primaryColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
                           ),
                         ),
                       ),

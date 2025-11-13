@@ -1,8 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// A service that wraps Supabase authentication flows. Provides helper
-/// methods to sign in with an email-based one‑time password (OTP), verify
-/// the OTP and manage the current session. This service does not
+/// methods to sign up, sign in, send and verify one‑time passwords (OTP),
+/// reset passwords and manage the current session. This service does not
 /// persist any additional state; all user/session state is stored in
 /// Supabase's internal cache.
 class AuthService {
@@ -77,5 +77,35 @@ class AuthService {
   /// exception if the sign‑out fails.
   static Future<void> logout() async {
     await _client.auth.signOut();
+  }
+
+  /// Sends a password reset email to the given address. Supabase will send
+  /// an email containing a reset code or link. This wrapper simply
+  /// forwards the call to Supabase; if an error occurs it will throw an
+  /// [AuthException].
+  static Future<void> sendPasswordResetEmail(String email) async {
+    await _client.auth.resetPasswordForEmail(email);
+  }
+
+  /// Verifies a recovery OTP code and updates the user's password. Returns
+  /// true on success. When the recovery code is verified Supabase will
+  /// establish a temporary session which allows updating the user's
+  /// password via [updateUser]. If verification or the update fails,
+  /// an exception will be thrown or false will be returned.
+  static Future<bool> verifyRecoveryAndUpdatePassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    final response = await _client.auth.verifyOTP(
+      email: email,
+      token: code,
+      type: OtpType.recovery,
+    );
+    if (response.session == null) {
+      return false;
+    }
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
+    return true;
   }
 }

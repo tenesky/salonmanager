@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../../services/auth_service.dart';
 
-/// Registration screen for new salon owners. This form includes additional
-/// fields to capture salon information. As with the customer registration,
-/// validation is basic and serves as a placeholder until backend integration.
+/// Registration screen for new salon owners.
+///
+/// This form collects the owner’s first and last name in addition to the
+/// salon’s name and address.  After sign‑up an OTP is sent via email
+/// for two‑factor authentication.  Validation is basic and serves as a
+/// placeholder until backend integration.
 class RegisterSalonPage extends StatefulWidget {
   const RegisterSalonPage({Key? key}) : super(key: key);
 
@@ -13,7 +16,8 @@ class RegisterSalonPage extends StatefulWidget {
 
 class _RegisterSalonPageState extends State<RegisterSalonPage> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _ownerNameController = TextEditingController();
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
@@ -23,7 +27,8 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
 
   @override
   void dispose() {
-    _ownerNameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -77,14 +82,28 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextFormField(
-                controller: _ownerNameController,
+                controller: _firstNameController,
                 decoration: const InputDecoration(
-                  labelText: 'Ihr Name',
+                  labelText: 'Vorname',
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Bitte geben Sie Ihren Namen ein.';
+                    return 'Bitte geben Sie Ihren Vornamen ein.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _lastNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Nachname',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Bitte geben Sie Ihren Nachnamen ein.';
                   }
                   return null;
                 },

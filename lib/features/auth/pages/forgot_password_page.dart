@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../../services/auth_service.dart';
 
-/// Page to initiate the password reset process. The user enters their
-/// email address, and on submission they are taken to the reset
-/// screen. In a real application this would trigger a backend call
-/// to send a reset code.
+/// Page to initiate the password reset process. The user enters
+/// their email address and, on submission, a reset code is sent.
+/// After the code is sent the user is navigated to the reset
+/// password screen with the email passed as an argument.
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({Key? key}) : super(key: key);
 
@@ -13,6 +14,7 @@ class ForgotPasswordPage extends StatefulWidget {
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final TextEditingController _emailController = TextEditingController();
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -45,14 +47,56 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () {
-                // TODO: call backend to send reset code
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Code gesendet (Demo).')),
-                );
-                Navigator.of(context).pushNamed('/reset-password');
-              },
-              child: const Text('Code senden'),
+              onPressed: _loading
+                  ? null
+                  : () async {
+                      final email = _emailController.text.trim();
+                      if (email.isEmpty ||
+                          !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Bitte geben Sie eine gültige E‑Mail ein.'),
+                          ),
+                        );
+                        return;
+                      }
+                      setState(() {
+                        _loading = true;
+                      });
+                      try {
+                        await AuthService.sendPasswordResetEmail(email);
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Code gesendet. Bitte prüfen Sie Ihre E‑Mail.'),
+                          ),
+                        );
+                        Navigator.of(context).pushNamed(
+                          '/reset-password',
+                          arguments: {'email': email},
+                        );
+                      } catch (error) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Fehler beim Senden des Codes: $error'),
+                          ),
+                        );
+                      } finally {
+                        if (mounted) {
+                          setState(() {
+                            _loading = false;
+                          });
+                        }
+                      }
+                    },
+              child: _loading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Code senden'),
             ),
             const SizedBox(height: 16),
             TextButton(

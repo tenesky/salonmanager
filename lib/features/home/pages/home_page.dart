@@ -11,7 +11,8 @@ import '../../salon/models/salon.dart';
 /// a placeholder map section and a few recommended salons. It serves
 /// as the landing page after login and does not require backend
 /// interaction. Navigation to the full salon list is provided at the
-/// bottom.
+/// bottom. A bottom navigation bar allows quick access to the
+/// customer profile.
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
 
@@ -23,7 +24,8 @@ class HomePage extends StatefulWidget {
 /// location (if permission is granted) and displays a small map
 /// preview directly on the home screen. Tapping the map preview
 /// navigates to the full interactive map. The bottom buttons use
-/// custom styles to ensure the text remains legible in dark mode.
+/// custom styles to ensure the text remains legible in dark mode. A
+/// bottom navigation bar is used to navigate to the profile page.
 class _HomePageState extends State<HomePage> {
   LatLng? _userLocation;
   final TextEditingController _searchController = TextEditingController();
@@ -265,9 +267,51 @@ class _HomePageState extends State<HomePage> {
                   child: const Text('Meine Buchungen'),
                 ),
               ),
+
+              const SizedBox(height: 12),
+              // Button to open the loyalty overview. This demonstrates the
+              // Treue‑Programm page with static points and rewards. In a
+              // real implementation the values would be loaded from the
+              // salon's loyalty program and the customer's account.
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.colorScheme.onSurface,
+                    side: BorderSide(color: theme.colorScheme.onSurface),
+                  ),
+                  onPressed: () {
+                    if (!AuthService.isLoggedIn()) {
+                      Navigator.of(context).pushNamed('/login');
+                    } else {
+                      Navigator.of(context).pushNamed('/loyalty');
+                    }
+                  },
+                  child: const Text('Treue‑Übersicht'),
+                ),
+              ),
             ],
           ),
         ),
+      ),
+      // Bottom navigation bar to navigate to the customer profile. The
+      // second item opens the CRM customer profile page for a static
+      // user id (1) as a demonstration. In a full implementation
+      // this would use the current logged‑in customer's id.
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+        ],
+        onTap: (index) {
+          if (index == 1) {
+            Navigator.of(context).pushNamed(
+              '/crm/customer',
+              arguments: {'id': 1},
+            );
+          }
+        },
       ),
     );
   }

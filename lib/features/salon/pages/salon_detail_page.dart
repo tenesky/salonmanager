@@ -1,24 +1,35 @@
 import 'package:flutter/material.dart';
 import '../models/salon.dart';
 
-/// Detail view for a salon. Displays basic information about the salon
-/// and provides a quick booking option via a bottom sheet. The
-/// bottom sheet contains a mini‑calendar and a time slot picker, and
-/// a CTA that navigates to the booking wizard step 1. This
-/// corresponds to the „Salon‑Schnellwahl“ screen (Modul B, Screen 14).
-class SalonDetailPage extends StatefulWidget {
+/// Detail view for a salon. This page displays a hero area with cover
+/// image and logo, salon contact details, a list of services with
+/// price and duration, and a team section with photos. A
+/// "Jetzt buchen"‑Button at the bottom navigates to the booking
+/// wizard.
+class SalonDetailPage extends StatelessWidget {
   final Salon salon;
 
   const SalonDetailPage({Key? key, required this.salon}) : super(key: key);
 
   @override
-  State<SalonDetailPage> createState() => _SalonDetailPageState();
-}
-
-class _SalonDetailPageState extends State<SalonDetailPage> {
-  @override
   Widget build(BuildContext context) {
-    final salon = widget.salon;
+    // Static list of services for demonstration. In a real
+    // implementation these would come from the backend for this salon.
+    final services = [
+      {'title': 'Haarschnitt', 'price': '45 €', 'duration': '60 min'},
+      {'title': 'Färben', 'price': '70 €', 'duration': '90 min'},
+      {'title': 'Bart trimmen', 'price': '20 €', 'duration': '30 min'},
+    ];
+
+    // Static team members for demonstration. Each entry contains a
+    // name and an asset path for the photo. These can be replaced by
+    // real images and data.
+    final team = [
+      {'name': 'Anna', 'image': 'assets/icon_cropped.png'},
+      {'name': 'Paul', 'image': 'assets/icon_cropped2.png'},
+      {'name': 'Lisa', 'image': 'assets/icon_manual_crop.png'},
+    ];
+
     return Scaffold(
       appBar: AppBar(
         title: Text(salon.name),
@@ -27,7 +38,7 @@ class _SalonDetailPageState extends State<SalonDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Cover image with logo overlay
+            // Hero area: cover image with logo overlay
             Stack(
               children: [
                 Image.asset(
@@ -81,14 +92,60 @@ class _SalonDetailPageState extends State<SalonDetailPage> {
                     ],
                   ),
                   const SizedBox(height: 24),
+                  // Services list
+                  Text(
+                    'Leistungen',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Column(
+                    children: services
+                        .map(
+                          (service) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(service['title'] as String),
+                            subtitle: Text(service['duration'] as String),
+                            trailing: Text(service['price'] as String),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: 24),
+                  // Team section
+                  Text(
+                    'Unser Team',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: team
+                        .map(
+                          (member) => Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircleAvatar(
+                                radius: 32,
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.primary,
+                                backgroundImage:
+                                    AssetImage(member['image'] as String),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(member['name'] as String),
+                            ],
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      // Start the booking wizard directly. We begin at the
-                      // salon selection step so the user can confirm or change
-                      // their selection. In a future iteration this could
-                      // pre‑select the current salon and skip that step.
                       onPressed: () {
+                        // Start the booking wizard. This navigates to the
+                        // first step of the booking flow (salon selection).
                         Navigator.of(context).pushNamed('/booking/select-salon');
                       },
                       child: const Text('Jetzt buchen'),
@@ -102,15 +159,4 @@ class _SalonDetailPageState extends State<SalonDetailPage> {
       ),
     );
   }
-
-  /// Opens a bottom sheet allowing the user to quickly select a date
-  /// and time for a booking. Once both a day and a time are chosen,
-  /// the "Zum Booking‑Wizard" button navigates to the first step of
-  /// the booking process. This implements the mini‑calendar and
-  /// timeslot picker required for Screen 14. For now the wizard page
-  /// is a placeholder.
-  // The quick booking bottom sheet has been removed. Booking now always starts
-  // at the full booking wizard (salon selection). This stub remains for
-  // compatibility but does nothing.
-  void _openQuickBooking() {}
 }

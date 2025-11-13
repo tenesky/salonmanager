@@ -7,6 +7,7 @@ import 'features/auth/pages/login_page.dart';
 import 'features/auth/pages/two_factor_page.dart';
 import 'features/auth/pages/register_customer_page.dart';
 import 'features/auth/pages/register_salon_page.dart';
+import 'features/auth/pages/register_admin_page.dart';
 import 'features/auth/pages/forgot_password_page.dart';
 import 'features/auth/pages/reset_password_page.dart';
 // Import home and salon pages
@@ -47,6 +48,9 @@ import 'features/booking/pages/cancel_bookings_page.dart';
 // disable notification channels (Push/E‑Mail) as described in the
 // Reminder‑Konfiguration specification【73678961014422†L1444-L1447】.
 import 'features/settings/pages/reminder_settings_page.dart';
+// Import the loyalty overview page. This page shows the customer's points,
+// level and available rewards. It implements Screen 53 (Treue‑Übersicht).
+import 'features/loyalty/pages/loyalty_overview_page.dart';
 // Import service setup page for configuring price and duration per stylist
 // per service. This page shows a matrix of services and stylists with
 // editable cells for price, duration and activation state【73678961014422†L1515-L1519】.
@@ -106,6 +110,7 @@ class MyApp extends StatelessWidget {
         '/two-factor': (context) => const TwoFactorPage(),
         '/register-customer': (context) => const RegisterCustomerPage(),
         '/register-salon': (context) => const RegisterSalonPage(),
+        '/register-admin': (context) => const RegisterAdminPage(),
         '/forgot-password': (context) => const ForgotPasswordPage(),
         '/reset-password': (context) => const ResetPasswordPage(),
         '/home': (context) => const HomePage(),
@@ -212,6 +217,10 @@ class MyApp extends StatelessWidget {
         // appointment a reminder should be sent and whether Push and
         // E‑Mail notifications are enabled【73678961014422†L1502-L1505】.
         '/settings/reminder': (context) => const ReminderSettingsPage(),
+        // Route to the loyalty overview page for customers. Displays
+        // current points, level and rewards. Implements Screen 53
+        // (Treue‑Übersicht) with static demo data for now.
+        '/loyalty': (context) => const LoyaltyOverviewPage(),
         // Legal notice page. Displays company information required by law.
         '/impressum': (context) => const ImpressumPage(),
         // Route to the service setup page. This screen presents a matrix

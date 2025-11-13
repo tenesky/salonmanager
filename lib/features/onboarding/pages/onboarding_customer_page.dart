@@ -4,12 +4,11 @@ import '../../../common/themed_background.dart';
 
 /// Onboarding screen for new customers.
 ///
-/// This page allows the user to select their hair length, preferred style
-/// and hair color via chips. It also includes an opt‑in toggle for
-/// marketing push notifications. When the user taps "Weiter", the
-/// selections are persisted locally using [SharedPreferences] and the
-/// customer is navigated to the home page.  In a real application
-/// these values would also be sent to the backend via an API call.
+/// This page allows a user to customise basic preferences such as hair
+/// length, style and colour, and to provide contact details.  The
+/// selections are stored locally via SharedPreferences and can be used
+/// later for personalisation.  A "Weiter" button completes the
+/// onboarding and navigates to the home page.
 class OnboardingCustomerPage extends StatefulWidget {
   const OnboardingCustomerPage({Key? key}) : super(key: key);
 
@@ -18,14 +17,6 @@ class OnboardingCustomerPage extends StatefulWidget {
 }
 
 class _OnboardingCustomerPageState extends State<OnboardingCustomerPage> {
-  // Lists of available options for each category.  These can be
-  // customized or loaded from a remote source.  For the purposes of
-  // this demo we provide a few sensible defaults.
-  /// Hair length options with approximate lengths in centimetres.  These
-  /// labels provide more context for users when selecting their
-  /// preferred hair length. The underlying value stored is the full
-  /// string (e.g. "Kurz (<10cm)") but could be normalised before
-  /// sending to a backend if needed.
   final List<String> _hairLengthOptions =
       const ['Kurz (<10cm)', 'Mittel (10–20cm)', 'Lang (>20cm)'];
   final List<String> _styleOptions = const ['Klassisch', 'Modern', 'Trend'];
@@ -36,25 +27,34 @@ class _OnboardingCustomerPageState extends State<OnboardingCustomerPage> {
   String? _selectedColor;
   bool _pushOptIn = false;
 
-  /// Persists the current selections to local storage.  Uses the
-  /// [SharedPreferences] plugin, which has been added to the project
-  /// dependencies.  Each value is saved under its own key.
+  // Contact information controllers.  The phone number helps with
+  // appointment reminders; the address is optional and can be used
+  // later for location‑based suggestions.
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  /// Persist the selections and contact information to local storage.
   Future<void> _savePreferences() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('onboarding.hairLength', _selectedHairLength ?? '');
     await prefs.setString('onboarding.style', _selectedStyle ?? '');
     await prefs.setString('onboarding.color', _selectedColor ?? '');
     await prefs.setBool('onboarding.pushOptIn', _pushOptIn);
+    await prefs.setString('onboarding.phone', _phoneController.text.trim());
+    await prefs.setString('onboarding.address', _addressController.text.trim());
   }
 
-  /// Navigates to the home page after saving preferences.  A loading
-  /// indicator is shown while the preferences are being saved.
+  /// Save preferences and navigate to the home page.
   Future<void> _completeOnboarding(BuildContext context) async {
-    // Save the selections.
     await _savePreferences();
     if (!mounted) return;
-    // Navigate to home.  Replace the current route so the onboarding
-    // page is removed from the stack.
     Navigator.of(context).pushReplacementNamed('/home');
   }
 
@@ -66,8 +66,6 @@ class _OnboardingCustomerPageState extends State<OnboardingCustomerPage> {
         title: const Text('Erst‑Onboarding'),
         automaticallyImplyLeading: false,
       ),
-      // Use a themed background behind the content.  This provides
-      // subtle texture and aligns with the global design guidelines.
       body: ThemedBackground(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
@@ -120,7 +118,7 @@ class _OnboardingCustomerPageState extends State<OnboardingCustomerPage> {
                 }).toList(),
               ),
               const SizedBox(height: 16),
-              // Color selection
+              // Colour selection
               Text('Farbe', style: theme.textTheme.titleMedium),
               const SizedBox(height: 8),
               Wrap(
@@ -136,6 +134,30 @@ class _OnboardingCustomerPageState extends State<OnboardingCustomerPage> {
                     },
                   );
                 }).toList(),
+              ),
+              const SizedBox(height: 24),
+              // Contact fields
+              Text('Kontakt', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Telefonnummer',
+                  hintText: '+49 123 4567890',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _addressController,
+                keyboardType: TextInputType.streetAddress,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Adresse (optional)',
+                  hintText: 'Straße, PLZ, Ort',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 24),
               // Push marketing opt‑in
@@ -164,7 +186,7 @@ class _OnboardingCustomerPageState extends State<OnboardingCustomerPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Optional skip button to allow users to bypass onboarding.
+              // Optional skip button
               TextButton(
                 style: TextButton.styleFrom(
                   foregroundColor: theme.colorScheme.onSurface,
