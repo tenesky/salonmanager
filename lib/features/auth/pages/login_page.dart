@@ -14,11 +14,13 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   bool _loading = false;
 
   @override
   void dispose() {
     _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -27,20 +29,29 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final email = _emailController.text.trim();
+    final password = _passwordController.text;
     setState(() {
       _loading = true;
     });
     try {
-      await AuthService.sendOtp(email);
+      // First sign in with email and password. This will throw if the
+      // credentials are invalid.
+      await AuthService.signInWithPassword(email: email, password: password);
+      // After a successful password login, send a one‑time code for
+      // two‑factor authentication. The user must verify this code to
+      // complete login.
+      await AuthService.sendOtpForExistingUser(email);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Code gesendet. Bitte prüfen Sie Ihre E-Mail.')),
+        const SnackBar(content: Text('Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
       );
-      Navigator.of(context).pushNamed('/two-factor', arguments: {'email': email});
+      Navigator.of(context).pushNamed('/two-factor', arguments: {
+        'email': email,
+      });
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Fehler beim Senden des Codes: $error')),
+        SnackBar(content: Text('Fehler beim Login oder Senden des Codes: $error')),
       );
     } finally {
       if (mounted) {
@@ -82,6 +93,24 @@ class _LoginPageState extends State<LoginPage> {
                       }
                       if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
                         return 'Ungültige E-Mail-Adresse';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    decoration: const InputDecoration(
+                      labelText: 'Passwort',
+                      border: OutlineInputBorder(),
+                    ),
+                    obscureText: true,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Bitte Passwort eingeben';
+                      }
+                      if (value.length < 6) {
+                        return 'Das Passwort muss mindestens 6 Zeichen lang sein';
                       }
                       return null;
                     },

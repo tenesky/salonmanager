@@ -1,7 +1,7 @@
 name: salonmanager
 description: SalonManager Flutter App – Grundstruktur
 # Updated version number for database integration. Increment the build number for each release.
-version: 0.2.5
+version: 0.2.6.
 
 environment:
   sdk: ">=2.17.0 <3.0.0"

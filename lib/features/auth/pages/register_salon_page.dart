@@ -15,6 +15,8 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _ownerNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
   final TextEditingController _salonNameController = TextEditingController();
   final TextEditingController _salonAddressController = TextEditingController();
   bool _loading = false;
@@ -23,6 +25,8 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
   void dispose() {
     _ownerNameController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _salonNameController.dispose();
     _salonAddressController.dispose();
     super.dispose();
@@ -31,14 +35,18 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
     final email = _emailController.text.trim();
+    final password = _passwordController.text;
     setState(() {
       _loading = true;
     });
     try {
-      await AuthService.sendOtp(email);
+      // Register the salon owner using email/password.
+      await AuthService.signUpWithPassword(email: email, password: password);
+      // Send a 6‑digit code to complete two‑factor sign up.
+      await AuthService.sendOtpForExistingUser(email);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registrierungs-Code gesendet. Bitte prüfen Sie Ihre E-Mail.')),
+        const SnackBar(content: Text('Registrierungs‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
       );
       Navigator.of(context).pushNamed('/two-factor', arguments: {'email': email});
     } catch (error) {
@@ -95,6 +103,42 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
                   }
                   if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
                     return 'Ungültige E‑Mail‑Adresse.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Passwort',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Bitte legen Sie ein Passwort fest.';
+                  }
+                  if (value.length < 6) {
+                    return 'Das Passwort muss mindestens 6 Zeichen lang sein.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _confirmPasswordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Passwort bestätigen',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Bitte bestätigen Sie Ihr Passwort.';
+                  }
+                  if (value != _passwordController.text) {
+                    return 'Passwörter stimmen nicht überein.';
                   }
                   return null;
                 },

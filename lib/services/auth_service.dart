@@ -8,16 +8,41 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class AuthService {
   static final SupabaseClient _client = Supabase.instance.client;
 
-  /// Sends a one‑time password (OTP) to the given email address. This
-  /// triggers Supabase to send an email with a 6‑digit code. The code
-  /// can then be verified via [verifyOtp]. Throws an exception if the
-  /// request fails.
-  static Future<void> sendOtp(String email) async {
-    // signInWithOtp returns an [AuthResponse] containing session/user when
-    // successful.  Supabase throws a [AuthException] on failure rather than
-    // populating an error field in the response.  Await the call and let
-    // any exceptions propagate to the caller.
-    await _client.auth.signInWithOtp(email: email);
+  /// Registers a new user account using email and password. This creates
+  /// the user in Supabase Auth and triggers a confirmation email if
+  /// confirmation is required by your project settings. If registration
+  /// fails (e.g. the email is already taken), an [AuthException] is
+  /// thrown. After a successful sign‑up you should send an OTP via
+  /// [sendOtpForExistingUser] to perform 2FA.
+  static Future<void> signUpWithPassword({
+    required String email,
+    required String password,
+  }) async {
+    await _client.auth.signUp(email: email, password: password);
+  }
+
+  /// Signs in an existing user using their email and password. This
+  /// method verifies the credentials and returns an [AuthResponse]
+  /// containing a session on success. If authentication fails, a
+  /// [AuthException] is thrown. After a successful password login you
+  /// should call [sendOtpForExistingUser] to initiate the second
+  /// authentication factor.
+  static Future<void> signInWithPassword({
+    required String email,
+    required String password,
+  }) async {
+    await _client.auth.signInWithPassword(email: email, password: password);
+  }
+
+  /// Sends a one‑time password (OTP) email to an existing user. This
+  /// triggers Supabase to send an email containing a 6‑digit code. The
+  /// [shouldCreateUser] option is set to false to ensure a new user
+  /// record is not created when sending the OTP after sign‑up or sign‑in.
+  static Future<void> sendOtpForExistingUser(String email) async {
+    await _client.auth.signInWithOtp(
+      email: email,
+      options: const AuthOtpOptions(shouldCreateUser: false),
+    );
   }
 
   /// Verifies a one‑time password for the given email address. Returns
@@ -25,11 +50,10 @@ class AuthService {
   /// Otherwise throws an exception or returns false. The [type]
   /// parameter is set to [OtpType.email] because we are using email
   /// codes. For phone number codes, use [OtpType.sms].
-  static Future<bool> verifyOtp({required String email, required String code}) async {
-    // verifyOTP returns an [AuthResponse] containing a session on success.
-    // If verification fails, Supabase will throw a [AuthException].  We
-    // catch exceptions and rethrow them to the caller.  Otherwise we
-    // return true when a session is present.
+  static Future<bool> verifyOtp({
+    required String email,
+    required String code,
+  }) async {
     final response = await _client.auth.verifyOTP(
       type: OtpType.email,
       email: email,

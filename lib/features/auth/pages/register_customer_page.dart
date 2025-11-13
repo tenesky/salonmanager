@@ -15,6 +15,8 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
   bool _acceptMarketing = false;
   bool _loading = false;
 
@@ -22,23 +24,30 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
     final email = _emailController.text.trim();
+    final password = _passwordController.text;
     setState(() {
       _loading = true;
     });
     try {
-      // Send an OTP to the provided email. Supabase will create a
-      // pending user account. Additional profile fields (name,
-      // acceptMarketing) can be stored later in the Supabase DB.
-      await AuthService.sendOtp(email);
+      // First sign up with email and password. This creates the user in
+      // Supabase Auth. If the email is already registered or invalid,
+      // this call will throw an AuthException.
+      await AuthService.signUpWithPassword(email: email, password: password);
+      // Immediately send a one‑time code to the newly registered user to
+      // complete 2FA. Setting shouldCreateUser to false ensures we
+      // don’t accidentally create another user record.
+      await AuthService.sendOtpForExistingUser(email);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registrierungs-Code gesendet. Bitte prüfen Sie Ihre E-Mail.')),
+        const SnackBar(content: Text('Registrierungs‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
       );
       // Pass the email to the 2FA page for code verification.
       Navigator.of(context).pushNamed('/two-factor', arguments: {'email': email});
@@ -96,6 +105,42 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
                   }
                   if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
                     return 'Ungültige E‑Mail‑Adresse.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Passwort',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Bitte legen Sie ein Passwort fest.';
+                  }
+                  if (value.length < 6) {
+                    return 'Das Passwort muss mindestens 6 Zeichen lang sein.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _confirmPasswordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Passwort bestätigen',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Bitte bestätigen Sie Ihr Passwort.';
+                  }
+                  if (value != _passwordController.text) {
+                    return 'Passwörter stimmen nicht überein.';
                   }
                   return null;
                 },
