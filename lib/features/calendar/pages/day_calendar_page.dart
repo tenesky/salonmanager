@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:salonmanager/services/db_service.dart';
-import 'package:intl/intl.dart';
 
 /// Represents a booking in the daily calendar.
 ///
@@ -81,21 +80,19 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
       _loading = true;
     });
     try {
-      final conn = await DbService.getConnection();
-      // Load stylists (id, name, color). Order by id ensures consistent index mapping.
-      final stylistRows = await conn.query('SELECT id, name, color FROM stylists ORDER BY id');
-      final List<Map<String, dynamic>> stylists = [];
+      // Load stylists and derive their colours.  Colours are parsed from
+      // the hex strings stored in the database; when a stylist has no
+      // colour specified, a default palette entry is used.
+      final List<Map<String, dynamic>> stylists = await DbService.getStylists();
       final List<Color> colors = [];
-      for (final row in stylistRows) {
-        stylists.add({'id': row['id'], 'name': row['name'], 'color': row['color']});
-        // Parse hex colour if available, otherwise fall back to a default palette entry.
-        final dynamic colorValue = row['color'];
+      for (final stylist in stylists) {
+        final dynamic colorValue = stylist['color'];
         if (colorValue is String && colorValue.startsWith('#') && colorValue.length == 7) {
           final intColor = int.parse(colorValue.substring(1), radix: 16) + 0xFF000000;
           colors.add(Color(intColor));
         }
       }
-      // If not enough colours defined, fill with default swatches.
+      // Fill remaining colours with defaults if necessary
       final defaultPalette = [
         Colors.amber.shade700,
         Colors.blue.shade600,
@@ -107,44 +104,19 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
       while (colors.length < stylists.length) {
         colors.add(defaultPalette[colors.length % defaultPalette.length]);
       }
-      // Load services (id, name, price, duration)
-      final serviceRows = await conn.query('SELECT id, name, price, duration FROM services ORDER BY id');
-      final List<Map<String, dynamic>> services = [];
-      for (final row in serviceRows) {
-        services.add({
-          'id': row['id'],
-          'name': row['name'],
-          'price': row['price'],
-          'duration': row['duration'],
-        });
-      }
-      // Load bookings for the selected date
-      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final bookingRows = await conn.query(
-        '''
-        SELECT b.id,
-               c.first_name AS firstName,
-               c.last_name AS lastName,
-               srv.name AS serviceName,
-               b.stylist_id,
-               b.start_datetime AS startDateTime,
-               b.duration
-        FROM bookings b
-        JOIN customers c ON b.customer_id = c.id
-        JOIN services srv ON b.service_id = srv.id
-        WHERE DATE(b.start_datetime) = ? AND b.status IN ('pending','confirmed')
-        ORDER BY b.start_datetime
-        ''',
-        [dateStr],
-      );
+      // Load services
+      final List<Map<String, dynamic>> services = await DbService.getServices();
+      // Load bookings for the selected date with details
+      final List<Map<String, dynamic>> bookingRows =
+          await DbService.getDetailedBookingsForDate(_selectedDate);
       final List<Booking> loadedBookings = [];
       for (final row in bookingRows) {
         // Determine stylist index by matching stylist_id in stylists list
-        final int stylistId = row['stylist_id'];
+        final int stylistId = row['stylist_id'] as int;
         final int stylistIndex = stylists.indexWhere((s) => s['id'] == stylistId);
-        // Parse start datetime to TimeOfDay
+        // Parse start datetime (UTC or local) into TimeOfDay
         DateTime dt;
-        final dynamic v = row['startDateTime'];
+        final dynamic v = row['start_datetime'];
         if (v is DateTime) {
           dt = v.toLocal();
         } else if (v is String) {
@@ -153,17 +125,18 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
           dt = DateTime.now();
         }
         final TimeOfDay startTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
-        final String clientName = '${row['firstName']} ${row['lastName']}';
+        final String firstName = row['firstName']?.toString() ?? '';
+        final String lastName = row['lastName']?.toString() ?? '';
+        final String clientName = (firstName + ' ' + lastName).trim();
         loadedBookings.add(Booking(
           id: row['id'].toString(),
           client: clientName,
-          service: row['serviceName'],
+          service: row['serviceName']?.toString() ?? '',
           stylistIndex: stylistIndex < 0 ? 0 : stylistIndex,
           startTime: startTime,
           duration: row['duration'] as int,
         ));
       }
-      await conn.close();
       setState(() {
         _stylists = stylists;
         stylistColors = colors;
@@ -311,23 +284,18 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
             ElevatedButton(
               onPressed: () async {
                 if (selectedTime != null && clientController.text.isNotEmpty) {
-                  // Parse client name
+                  // Parse client name (first and last name separated by space)
                   final names = clientController.text.trim().split(' ');
-                  final firstName = names.isNotEmpty ? names.first : '';
-                  final lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
+                  final String firstName = names.isNotEmpty ? names.first : '';
+                  final String lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
                   try {
-                    final conn = await DbService.getConnection();
-                    // Insert new customer
-                    final customerResult = await conn.query(
-                      'INSERT INTO customers (first_name, last_name) VALUES (?, ?)',
-                      [firstName, lastName],
-                    );
-                    final int customerId = customerResult.insertId ?? 0;
-                    final stylistId = _stylists[selectedStylist]['id'] as int;
-                    final service = _services[selectedServiceIndex];
+                    // Resolve ids and details for stylist and service
+                    final int stylistId = _stylists[selectedStylist]['id'] as int;
+                    final Map<String, dynamic> service = _services[selectedServiceIndex];
                     final int serviceId = service['id'] as int;
                     final double price = (service['price'] as num).toDouble();
                     final int duration = selectedDuration;
+                    // Construct the local start datetime for the appointment
                     final DateTime startDateTime = DateTime(
                       _selectedDate.year,
                       _selectedDate.month,
@@ -335,11 +303,20 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
                       selectedTime!.hour,
                       selectedTime!.minute,
                     );
-                    await conn.query(
-                      'INSERT INTO bookings (customer_id, stylist_id, service_id, start_datetime, duration, price, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                      [customerId, stylistId, serviceId, startDateTime.toUtc(), duration, price, 'pending'],
+                    // Create the customer and booking via Supabase helpers
+                    final int customerId = await DbService.createCustomer(
+                      firstName: firstName,
+                      lastName: lastName,
                     );
-                    await conn.close();
+                    await DbService.createBooking(
+                      customerId: customerId,
+                      stylistId: stylistId,
+                      serviceId: serviceId,
+                      startDateTime: startDateTime,
+                      duration: duration,
+                      price: price,
+                      status: 'pending',
+                    );
                     Navigator.of(context).pop();
                     // Reload data to reflect new booking
                     _loadData();
@@ -472,7 +449,8 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
                 booking.stylistIndex = stylistIndex;
                 booking.startTime = TimeOfDay(hour: newHour, minute: newMinute);
               });
-              // Persist the updated position to the database. Use try/catch to swallow errors.
+              // Persist the updated position to Supabase.  Errors are
+              // caught and ignored to avoid disrupting the drag UI.
               try {
                 final booking = details.data;
                 final int bookingId = int.tryParse(booking.id) ?? 0;
@@ -484,12 +462,11 @@ class _DayCalendarPageState extends State<DayCalendarPage> {
                   newHour,
                   newMinute,
                 );
-                final conn = await DbService.getConnection();
-                await conn.query(
-                  'UPDATE bookings SET stylist_id = ?, start_datetime = ? WHERE id = ?',
-                  [stylistId, newStartDateTime.toUtc(), bookingId],
+                await DbService.updateBookingStartAndStylist(
+                  bookingId: bookingId,
+                  stylistId: stylistId,
+                  startDateTime: newStartDateTime,
                 );
-                await conn.close();
               } catch (_) {
                 // ignore database errors in drag
               }

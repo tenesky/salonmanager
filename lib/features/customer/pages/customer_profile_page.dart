@@ -153,7 +153,9 @@ class _CustomerProfilePageState extends State<CustomerProfilePage>
                   children: [
                     Text(
                       name,
-                      style: Theme.of(context).textTheme.headline6,
+                      // 'headline6' was removed in the latest Flutter
+                      // Material typography.  Use `titleLarge` instead.
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(width: 8),
                     if (isRegular)

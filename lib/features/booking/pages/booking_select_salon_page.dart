@@ -3,6 +3,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../services/auth_service.dart';
+// Import DbService via the package name rather than a relative path for
+// consistency with other files in the project.
+import 'package:salonmanager/services/db_service.dart';
 
 /// First step of the booking wizard: select a salon. This screen
 /// provides a search bar, filter chips (Distanz, Preis, Bewertung)

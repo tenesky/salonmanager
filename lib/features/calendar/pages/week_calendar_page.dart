@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:salonmanager/services/db_service.dart';
 
 /// Represents a booking in the weekly calendar.  Reuses the same structure
@@ -78,14 +77,11 @@ class _WeekCalendarPageState extends State<WeekCalendarPage> {
       _loading = true;
     });
     try {
-      final conn = await DbService.getConnection();
-      // Load stylists (id, name, colour)
-      final stylistRows = await conn.query('SELECT id, name, color FROM stylists ORDER BY id');
-      final List<Map<String, dynamic>> stylists = [];
+      // Load stylists and derive their colours using Supabase.
+      final List<Map<String, dynamic>> stylists = await DbService.getStylists();
       final List<Color> colors = [];
-      for (final row in stylistRows) {
-        stylists.add({'id': row['id'], 'name': row['name'], 'color': row['color']});
-        final dynamic colorValue = row['color'];
+      for (final stylist in stylists) {
+        final dynamic colorValue = stylist['color'];
         if (colorValue is String && colorValue.startsWith('#') && colorValue.length == 7) {
           final intColor = int.parse(colorValue.substring(1), radix: 16) + 0xFF000000;
           colors.add(Color(intColor));
@@ -103,57 +99,38 @@ class _WeekCalendarPageState extends State<WeekCalendarPage> {
       while (colors.length < stylists.length) {
         colors.add(defaultPalette[colors.length % defaultPalette.length]);
       }
-      // Prepare bookings map
+      // Fetch all bookings between week start and end (inclusive)
+      final DateTime weekEnd = _weekStart.add(const Duration(days: 6));
+      final bookingRows = await DbService.getDetailedBookingsBetween(_weekStart, weekEnd);
       final Map<DateTime, List<Booking>> weekBookings = {};
-      // For each day of the week (Monday=0..Sunday=6)
-      for (int i = 0; i < 7; i++) {
-        final DateTime day = _weekStart.add(Duration(days: i));
-        final String dateStr = DateFormat('yyyy-MM-dd').format(day);
-        final bookingRows = await conn.query(
-          '''
-          SELECT b.id,
-                 c.first_name AS firstName,
-                 c.last_name AS lastName,
-                 srv.name AS serviceName,
-                 b.stylist_id,
-                 b.start_datetime AS startDateTime,
-                 b.duration
-          FROM bookings b
-          JOIN customers c ON b.customer_id = c.id
-          JOIN services srv ON b.service_id = srv.id
-          WHERE DATE(b.start_datetime) = ? AND b.status IN ('pending','confirmed')
-          ORDER BY b.start_datetime
-          ''',
-          [dateStr],
-        );
-        final List<Booking> dayBookings = [];
-        for (final row in bookingRows) {
-          final int stylistId = row['stylist_id'];
-          final int stylistIndex = stylists.indexWhere((s) => s['id'] == stylistId);
-          // Parse datetime
-          DateTime dt;
-          final dynamic v = row['startDateTime'];
-          if (v is DateTime) {
-            dt = v.toLocal();
-          } else if (v is String) {
-            dt = DateTime.parse(v).toLocal();
-          } else {
-            dt = DateTime.now();
-          }
-          final TimeOfDay startTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
-          final String clientName = '${row['firstName']} ${row['lastName']}';
-          dayBookings.add(Booking(
-            id: row['id'].toString(),
-            client: clientName,
-            service: row['serviceName'],
-            stylistIndex: stylistIndex < 0 ? 0 : stylistIndex,
-            startTime: startTime,
-            duration: row['duration'] as int,
-          ));
+      for (final row in bookingRows) {
+        final int stylistId = row['stylist_id'] as int;
+        final int stylistIndex = stylists.indexWhere((s) => s['id'] == stylistId);
+        // Parse start datetime into local DateTime
+        DateTime dt;
+        final dynamic v = row['start_datetime'];
+        if (v is DateTime) {
+          dt = v.toLocal();
+        } else if (v is String) {
+          dt = DateTime.parse(v).toLocal();
+        } else {
+          dt = DateTime.now();
         }
-        weekBookings[DateTime(day.year, day.month, day.day)] = dayBookings;
+        final TimeOfDay startTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
+        final DateTime dayKey = DateTime(dt.year, dt.month, dt.day);
+        final String firstName = row['firstName']?.toString() ?? '';
+        final String lastName = row['lastName']?.toString() ?? '';
+        final String clientName = (firstName + ' ' + lastName).trim();
+        final booking = Booking(
+          id: row['id'].toString(),
+          client: clientName,
+          service: row['serviceName']?.toString() ?? '',
+          stylistIndex: stylistIndex < 0 ? 0 : stylistIndex,
+          startTime: startTime,
+          duration: row['duration'] as int,
+        );
+        weekBookings.putIfAbsent(dayKey, () => []).add(booking);
       }
-      await conn.close();
       setState(() {
         _stylists = stylists;
         stylistColors = colors;

@@ -1,4 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+// The PostgREST classes are used for compatibility extensions below.
+import 'package:postgrest/postgrest.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
@@ -721,6 +723,153 @@ class DbService {
     return data['id'] as int;
   }
 
+  /// Inserts a new customer into the `customers` table and returns
+  /// the generated id.  Only the `first_name` and `last_name` fields
+  /// are required; other fields such as email or phone may be added
+  /// later via separate update methods.  When an error occurs, a
+  /// [PostgrestException] is thrown.
+  static Future<int> createCustomer({
+    required String firstName,
+    required String lastName,
+  }) async {
+    final response = await _client
+        .from('customers')
+        .insert({
+          'first_name': firstName,
+          'last_name': lastName,
+        })
+        .select('id')
+        .single()
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data;
+    return data['id'] as int;
+  }
+
+  /// Retrieves all bookings on a given [date] with joined customer
+  /// and service names.  Only bookings whose status is either
+  /// `pending` or `confirmed` are returned.  Each map in the
+  /// returned list contains the following keys:
+  ///
+  /// * `id` – the booking id
+  /// * `firstName` – the customer's first name
+  /// * `lastName` – the customer's last name
+  /// * `serviceName` – the service name
+  /// * `stylist_id` – the stylist id
+  /// * `start_datetime` – a UTC ISO8601 string for the start time
+  /// * `duration` – the booking duration in minutes
+  ///
+  /// This helper is used by the day calendar to populate the
+  /// timeline.  Join syntax in the select clause automatically
+  /// retrieves fields from the related `customers` and `services`
+  /// tables based on foreign keys.  If no bookings are found, an
+  /// empty list is returned.
+  static Future<List<Map<String, dynamic>>> getDetailedBookingsForDate(
+      DateTime date) async {
+    // Determine the UTC start of the selected day and the next day
+    final dayStartUtc = DateTime(date.year, date.month, date.day).toUtc();
+    final nextDayUtc = dayStartUtc.add(const Duration(days: 1));
+    final response = await _client
+        .from('bookings')
+        .select(
+            'id, duration, start_datetime, stylist_id, status, customers(first_name,last_name), services(name)')
+        .gte('start_datetime', dayStartUtc.toIso8601String())
+        .lt('start_datetime', nextDayUtc.toIso8601String())
+        .in_('status', ['pending', 'confirmed'])
+        .order('start_datetime')
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    final List<Map<String, dynamic>> bookings = [];
+    for (final row in data) {
+      final map = Map<String, dynamic>.from(row);
+      final customer = map['customers'] as Map<String, dynamic>?;
+      final service = map['services'] as Map<String, dynamic>?;
+      bookings.add({
+        'id': map['id'],
+        'firstName': customer != null ? customer['first_name'] : null,
+        'lastName': customer != null ? customer['last_name'] : null,
+        'serviceName': service != null ? service['name'] : null,
+        'stylist_id': map['stylist_id'],
+        'start_datetime': map['start_datetime'],
+        'duration': map['duration'],
+      });
+    }
+    return bookings;
+  }
+
+  /// Updates the stylist id and start datetime of an existing booking.
+  /// The [bookingId] identifies the booking to update.  The
+  /// [startDateTime] must be provided in the local timezone and is
+  /// converted to UTC before saving.  Throws a [PostgrestException]
+  /// when the update fails.
+  static Future<void> updateBookingStartAndStylist({
+    required int bookingId,
+    required int stylistId,
+    required DateTime startDateTime,
+  }) async {
+    final response = await _client
+        .from('bookings')
+        .update({
+          'stylist_id': stylistId,
+          'start_datetime': startDateTime.toUtc().toIso8601String(),
+        })
+        .eq('id', bookingId)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Retrieves bookings between [startDate] and [endDate] inclusive
+  /// with joined customer and service names.  The date range is
+  /// interpreted in local time; both [startDate] and [endDate] are
+  /// normalised to the start of their respective days in UTC before
+  /// querying.  Only bookings whose status is either `pending` or
+  /// `confirmed` are returned.  See [getDetailedBookingsForDate]
+  /// for the structure of each returned map.
+  static Future<List<Map<String, dynamic>>> getDetailedBookingsBetween(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    // Normalise to start of day for startDate and endDate (inclusive)
+    final DateTime startUtc = DateTime(startDate.year, startDate.month, startDate.day).toUtc();
+    final DateTime endUtc = DateTime(endDate.year, endDate.month, endDate.day).toUtc().add(const Duration(days: 1));
+    final response = await _client
+        .from('bookings')
+        .select(
+            'id, duration, start_datetime, stylist_id, status, customers(first_name,last_name), services(name)')
+        .gte('start_datetime', startUtc.toIso8601String())
+        .lt('start_datetime', endUtc.toIso8601String())
+        .in_('status', ['pending', 'confirmed'])
+        .order('start_datetime')
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    final List<Map<String, dynamic>> bookings = [];
+    for (final row in data) {
+      final map = Map<String, dynamic>.from(row);
+      final customer = map['customers'] as Map<String, dynamic>?;
+      final service = map['services'] as Map<String, dynamic>?;
+      bookings.add({
+        'id': map['id'],
+        'firstName': customer != null ? customer['first_name'] : null,
+        'lastName': customer != null ? customer['last_name'] : null,
+        'serviceName': service != null ? service['name'] : null,
+        'stylist_id': map['stylist_id'],
+        'start_datetime': map['start_datetime'],
+        'duration': map['duration'],
+      });
+    }
+    return bookings;
+  }
+
 
   /// Cancels a list of bookings.  For each booking id in [ids], the
   /// booking status is updated to 'canceled'.  A cancellation
@@ -990,6 +1139,64 @@ class DbService {
   /// methods.  Do not rely on this for production use.
   static Future<_StubConnection> getConnection() async {
     return _StubConnection();
+  }
+}
+
+/// -------------------------------------------------------------------------
+/// Compatibility layer
+///
+/// Supabase Flutter v2 removed the `.execute()` and `.in_()` methods from
+/// the PostgREST query builders and replaced them with direct `await` on
+/// the builders and `inFilter()`.  To avoid a large refactor of the
+/// existing codebase, we provide thin extension methods that mimic the
+/// old API.  The [execute] extension wraps awaiting the builder in a
+/// try/catch block and returns a lightweight response object with
+/// `data`, `error` and `status` fields similar to the old
+/// `PostgrestResponse`.  The [in_] extension simply forwards to
+/// `inFilter()`.  If Supabase throws a [PostgrestException], its
+/// `code` string is parsed into an integer status when possible.
+
+/// A lightweight response object used by the execute() compatibility
+/// extension.  It contains the result data, any PostgREST error and
+/// an optional status code parsed from the error code.
+class _CompatPostgrestResponse<T> {
+  final T? data;
+  final PostgrestException? error;
+  final int? status;
+
+  _CompatPostgrestResponse({required this.data, this.error, this.status});
+}
+
+/// Provides an `execute()` method on PostgREST transform builders to mimic
+/// the removed execute() API from Supabase v1.  It awaits the query and
+/// wraps the result into a [_CompatPostgrestResponse].  Errors are
+/// captured and returned in the `error` field with the status parsed
+/// from the exception code when possible.  Usage of this extension
+/// allows the existing database service methods to continue using
+/// `await query.execute()` without modification.
+extension CompatExecuteExtension<T> on PostgrestTransformBuilder<T> {
+  Future<_CompatPostgrestResponse<T>> execute() async {
+    try {
+      // In Supabase v2, PostgREST builders are `Future`s.  Awaiting them
+      // directly yields the data (e.g. List<Map<String, dynamic>> or a
+      // single row) without wrapping into a response object.
+      final res = await this;
+      return _CompatPostgrestResponse<T>(data: res);
+    } on PostgrestException catch (e) {
+      // Attempt to parse numeric status from the error code.  Some
+      // PostgREST errors encode the HTTP status as a numeric string.
+      final int? status = int.tryParse(e.code ?? '');
+      return _CompatPostgrestResponse<T>(data: null, error: e, status: status);
+    }
+  }
+}
+
+/// Adds an `in_()` method to PostgREST filter builders which forwards
+/// arguments to `inFilter()`.  This mirrors the old API to simplify
+/// migration to Supabase v2.
+extension CompatInExtension<T> on PostgrestFilterBuilder<T> {
+  PostgrestFilterBuilder<T> in_(String column, List<dynamic> values) {
+    return inFilter(column, values);
   }
 }
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:salonmanager/services/db_service.dart';
 
 // Reuse the Booking model from the day calendar page to represent
@@ -52,14 +51,11 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
       _loading = true;
     });
     try {
-      final conn = await DbService.getConnection();
-      // Load stylists and derive colours.
-      final stylistRows = await conn.query('SELECT id, name, color FROM stylists ORDER BY id');
-      final List<Map<String, dynamic>> stylists = [];
+      // Load stylists and derive colours using Supabase.
+      final List<Map<String, dynamic>> stylists = await DbService.getStylists();
       final List<Color> colors = [];
-      for (final row in stylistRows) {
-        stylists.add({'id': row['id'], 'name': row['name'], 'color': row['color']});
-        final dynamic colorValue = row['color'];
+      for (final stylist in stylists) {
+        final dynamic colorValue = stylist['color'];
         if (colorValue is String && colorValue.startsWith('#') && colorValue.length == 7) {
           final intColor = int.parse(colorValue.substring(1), radix: 16) + 0xFF000000;
           colors.add(Color(intColor));
@@ -76,38 +72,19 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
       while (colors.length < stylists.length) {
         colors.add(defaultPalette[colors.length % defaultPalette.length]);
       }
-      // Determine first and last date of the month.
+      // Determine the first and last dates of the current month.
       final DateTime firstDay = DateTime(_focusedDate.year, _focusedDate.month, 1);
       final DateTime lastDay = DateTime(_focusedDate.year, _focusedDate.month + 1, 0);
-      final String startDateStr = DateFormat('yyyy-MM-dd').format(firstDay);
-      final String endDateStr = DateFormat('yyyy-MM-dd').format(lastDay);
-      final bookingRows = await conn.query(
-        '''
-        SELECT b.id,
-               b.start_datetime AS startDateTime,
-               b.duration,
-               b.price,
-               b.stylist_id,
-               c.first_name AS firstName,
-               c.last_name AS lastName,
-               srv.name AS serviceName
-        FROM bookings b
-        JOIN customers c ON b.customer_id = c.id
-        JOIN services srv ON b.service_id = srv.id
-        WHERE DATE(b.start_datetime) BETWEEN ? AND ?
-          AND b.status IN ('pending','confirmed')
-        ORDER BY b.start_datetime ASC
-        ''',
-        [startDateStr, endDateStr],
-      );
+      // Fetch bookings within the month range with detailed info.
+      final bookingRows = await DbService.getDetailedBookingsBetween(firstDay, lastDay);
       final Map<DateTime, List<dayCalendar.Booking>> grouped = {};
       for (final row in bookingRows) {
         // Determine stylist index by matching ID in stylists list.
-        final int stylistId = row['stylist_id'];
+        final int stylistId = row['stylist_id'] as int;
         final int stylistIndex = stylists.indexWhere((s) => s['id'] == stylistId);
-        // Parse start datetime
+        // Parse start datetime into local DateTime
         DateTime dt;
-        final dynamic v = row['startDateTime'];
+        final dynamic v = row['start_datetime'];
         if (v is DateTime) {
           dt = v.toLocal();
         } else if (v is String) {
@@ -117,18 +94,19 @@ class _MonthCalendarPageState extends State<MonthCalendarPage> {
         }
         final TimeOfDay timeOfDay = TimeOfDay(hour: dt.hour, minute: dt.minute);
         final dayDate = DateTime(dt.year, dt.month, dt.day);
-        final String clientName = '${row['firstName']} ${row['lastName']}';
+        final String firstName = row['firstName']?.toString() ?? '';
+        final String lastName = row['lastName']?.toString() ?? '';
+        final String clientName = (firstName + ' ' + lastName).trim();
         final booking = dayCalendar.Booking(
           id: row['id'].toString(),
           client: clientName,
-          service: row['serviceName'],
+          service: row['serviceName']?.toString() ?? '',
           stylistIndex: stylistIndex < 0 ? 0 : stylistIndex,
           startTime: timeOfDay,
           duration: row['duration'] as int,
         );
         grouped.putIfAbsent(dayDate, () => []).add(booking);
       }
-      await conn.close();
       setState(() {
         _stylists = stylists;
         _stylistColors = colors;

@@ -13,11 +13,11 @@ class AuthService {
   /// can then be verified via [verifyOtp]. Throws an exception if the
   /// request fails.
   static Future<void> sendOtp(String email) async {
-    final response = await _client.auth.signInWithOtp(email: email);
-    final error = response.error;
-    if (error != null) {
-      throw error;
-    }
+    // signInWithOtp returns an [AuthResponse] containing session/user when
+    // successful.  Supabase throws a [AuthException] on failure rather than
+    // populating an error field in the response.  Await the call and let
+    // any exceptions propagate to the caller.
+    await _client.auth.signInWithOtp(email: email);
   }
 
   /// Verifies a one‑time password for the given email address. Returns
@@ -26,15 +26,15 @@ class AuthService {
   /// parameter is set to [OtpType.email] because we are using email
   /// codes. For phone number codes, use [OtpType.sms].
   static Future<bool> verifyOtp({required String email, required String code}) async {
+    // verifyOTP returns an [AuthResponse] containing a session on success.
+    // If verification fails, Supabase will throw a [AuthException].  We
+    // catch exceptions and rethrow them to the caller.  Otherwise we
+    // return true when a session is present.
     final response = await _client.auth.verifyOTP(
       type: OtpType.email,
       email: email,
       token: code,
     );
-    final error = response.error;
-    if (error != null) {
-      throw error;
-    }
     return response.session != null;
   }
 
