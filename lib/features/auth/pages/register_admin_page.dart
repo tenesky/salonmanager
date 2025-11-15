@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../../services/auth_service.dart';
 
-/// Registration screen for new administrators.
+/// Registration screen for platform administrators.
 ///
-/// This form collects the administrator's first name, last name, email and
-/// password. After sign‑up an OTP is sent via email to complete two‑factor
-/// authentication. This page mirrors the customer registration flow but
-/// is separated for potential future enhancements specific to admins.  It
-/// currently does not enforce any special admin codes or roles – those are
-/// expected to be handled server‑side when the user is created.
+/// This form collects basic user information (first name, last name,
+/// email and password) and sends a 6‑digit verification code via email
+/// after sign up. Once the code is sent (or if Supabase reports that a
+/// code has recently been sent), the user is navigated to the 2FA
+/// page to enter the code. Backend role assignment for admins is
+/// handled server‑side.
 class RegisterAdminPage extends StatefulWidget {
   const RegisterAdminPage({Key? key}) : super(key: key);
 
@@ -35,6 +35,12 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
     super.dispose();
   }
 
+  /// Handles registration by creating the user account and sending a
+  /// one‑time code. If sending the code fails due to a cooldown
+  /// (e.g. "wait 57 seconds"), a snackbar is shown but the user is
+  /// still forwarded to the 2FA page so they can enter the previously
+  /// generated code. Any other error during sign up will stop the
+  /// process.
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
     final email = _emailController.text.trim();
@@ -43,11 +49,29 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
       _loading = true;
     });
     try {
-      // Register the admin user with Supabase using email/password.
+      // Create the user in Supabase Auth. The admin role is assigned on
+      // the backend. If the email already exists, an exception will be
+      // thrown.
       await AuthService.signUpWithPassword(email: email, password: password);
-      // Send a 6‑digit code to complete two‑factor sign‑up.
-      await AuthService.sendOtpForExistingUser(email);
+      // Attempt to send a 2FA code. Ignore cooldown errors and
+      // continue to the next screen.
+      try {
+        await AuthService.sendOtpForExistingUser(email);
+      } catch (error) {
+        // Inform the user that a code may already have been sent.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Code konnte nicht erneut gesendet werden: $error\nBitte prüfen Sie Ihre E‑Mail auf den bereits gesendeten Code.',
+              ),
+            ),
+          );
+        }
+      }
       if (!mounted) return;
+      // Show success message and navigate to 2FA page regardless of
+      // whether sending succeeded.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Registrierungs‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
       );
@@ -160,7 +184,7 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _loading ? null : _register,
                 style: Theme.of(context).brightness == Brightness.dark
@@ -182,7 +206,7 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
                 onPressed: () {
                   Navigator.of(context).pushReplacementNamed('/login');
                 },
-                child: const Text('Zum Login'),
+                child: const Text('Sie haben bereits ein Konto? Anmelden'),
               ),
             ],
           ),
