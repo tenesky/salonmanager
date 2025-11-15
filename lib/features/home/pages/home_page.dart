@@ -108,6 +108,15 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('Home'),
         actions: [
+          // Gear icon to open account settings.  Users can log out
+          // from the settings screen.
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Einstellungen',
+            onPressed: () {
+              Navigator.of(context).pushNamed('/settings/account');
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: 'Suche',

@@ -91,6 +91,9 @@ import 'features/booking/pages/booking_professional_detail_page.dart';
 import 'features/settings/pages/notification_settings_page.dart';
 import 'features/pos/pages/pos_page.dart';
 
+// Import account settings page for logging out and viewing account info.
+import 'features/settings/pages/account_settings_page.dart';
+
 // Import theme
 import 'core/theme.dart';
 
@@ -241,6 +244,10 @@ class MyApp extends StatelessWidget {
         '/loyalty': (context) => const LoyaltyOverviewPage(),
         // Legal notice page. Displays company information required by law.
         '/impressum': (context) => const ImpressumPage(),
+        // Route to the account settings page.  From here users can
+        // sign out of their account.  This implements the logout
+        // functionality requested by the user.
+        '/settings/account': (context) => const AccountSettingsPage(),
         // Route to the service setup page. This screen presents a matrix
         // view where managers can configure for each stylist which
         // services are offered, override price and duration, and activate
