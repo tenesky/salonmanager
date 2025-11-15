@@ -39,15 +39,15 @@ class AuthService {
   /// parameter `shouldCreateUser` is set to `false` to ensure a new user
   /// record is not created when sending the OTP after sign‑up or sign‑in.
   static Future<void> sendOtpForExistingUser(String email) async {
-    // Explicitly specify the channel as email to ensure Supabase sends a
-    // six‑digit code instead of only a magic link. Without setting
-    // `channel: OtpChannel.email`, Supabase may default to sending a
-    // magic‑link email template which might not include the one‑time code.
+    // Request a one‑time password (OTP) for an existing user. By default
+    // Supabase will send an email containing both a magic link and a
+    // six‑digit code. The code is accessible via the {{ .Token }}
+    // placeholder in your email template. To display the code in the
+    // email, ensure the template includes this variable. See Supabase
+    // docs for details.
     await _client.auth.signInWithOtp(
       email: email,
       shouldCreateUser: false,
-      emailRedirectTo: null,
-      channel: OtpChannel.email,
     );
   }
 

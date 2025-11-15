@@ -22,11 +22,6 @@ Future<void> main() async {
     url: 'https://tojygtbhddmlgyilgcyj.supabase.co',
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvanlndGJoZGRtbGd5aWxnY3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDA2MDksImV4cCI6MjA3ODQ3NjYwOX0.j0IoIRZZQfX_FS0lHd1xOpE5pUfEQ9lsKi5sX2vtIJg',
-    // Persist sessions across app launches and refresh tokens automatically.
-    authOptions: const AuthOptions(
-      persistSession: true,
-      autoRefreshToken: true,
-    ),
   );
   // Initialize connectivity monitoring so the offline overlay works from
   // the very start of the app.
