@@ -98,7 +98,9 @@ class AuthService {
   static Future<String?> inviteUser(String email) async {
     try {
       final admin = _client.auth.admin;
-      final response = await admin.inviteUserByEmail(email: email);
+      // The inviteUserByEmail method in supabase_flutter v2.x expects
+      // the email as a positional argument and returns an AdminUserResponse.
+      final response = await admin.inviteUserByEmail(email);
       final user = response.user;
       return user?.id;
     } on AuthException catch (e) {

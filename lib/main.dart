@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'app.dart';
 import 'core/connectivity_provider.dart';
+import 'app.dart';
 
 /// Entry point of the SalonManager Flutter application.
 ///
@@ -23,8 +23,8 @@ Future<void> main() async {
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvanlndGJoZGRtbGd5aWxnY3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDA2MDksImV4cCI6MjA3ODQ3NjYwOX0.j0IoIRZZQfX_FS0lHd1xOpE5pUfEQ9lsKi5sX2vtIJg',
   );
-  // Start listening for connectivity changes.  The offline overlay
-  // depends on this to update the UI when the device goes offline.
+  // Initialize connectivity monitoring so the offline overlay works from
+  // the very start of the app.
   ConnectivityProvider.instance.initialize();
   runApp(const MyApp());
 }

@@ -25,10 +25,9 @@ dependencies:
   intl: ^0.20.2
   geolocator: ^9.0.2
 
-  # Detects network connectivity changes.  This package allows the app
-  # to listen for offline/online status and show an offline page when
-  # the device is not connected to the internet.  It is used in the
-  # ConnectivityProvider.
+  # Detects network connectivity status and notifies when the device goes
+  # offline or comes back online.  Used by the ConnectivityProvider to
+  # display an offline overlay and retry option.
   connectivity_plus: ^4.0.1
 
   # Supabase client for Flutter. Provides authentication, realtime database
@@ -51,7 +50,15 @@ dependencies:
 
   # Charts for reports and analytics.  The fl_chart package provides
   # line, bar and pie charts used in the ReportsPage dashboards.
-  fl_chart: ^0.60.0
+  # Use a newer version of fl_chart that is compatible with the latest
+  # Flutter versions.  Earlier versions referenced deprecated APIs such as
+  # MediaQuery.boldTextOverride which causes compile errors.  The latest
+  # version removes these calls and is backwards compatible with our
+  # existing chart implementations.
+  # Upgrade to a newer version of fl_chart to avoid usage of deprecated
+  # MediaQuery.boldTextOverride API on iOS.  Version 1.1.x is
+  # compatible with Flutter 3.x and removes the deprecated call.
+  fl_chart: ^1.1.1
 
   # CSV converter for exporting report data.  This dependency
   # simplifies generating CSV strings from lists of maps.

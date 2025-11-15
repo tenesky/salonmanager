@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// A page displayed when a user navigates to an unknown route.
-///
-/// It shows a friendly 404 message and a button to return to the
-/// start page.  The [onUnknownRoute] handler in `app.dart` will
-/// navigate to this page when a route cannot be resolved.
+/// Displays a 404 error page when a requested route is not found.  The
+/// user can return to the start page via a button.
 class NotFoundPage extends StatelessWidget {
   const NotFoundPage({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Seite nicht gefunden'),
@@ -23,25 +21,25 @@ class NotFoundPage extends StatelessWidget {
               Icon(
                 Icons.error_outline,
                 size: 64,
-                color: Theme.of(context).colorScheme.secondary,
+                color: theme.colorScheme.secondary,
               ),
               const SizedBox(height: 16),
               Text(
                 '404',
-                style: Theme.of(context).textTheme.headline3?.copyWith(
-                      color: Theme.of(context).colorScheme.secondary,
+                style: theme.textTheme.displayMedium?.copyWith(
+                      color: theme.colorScheme.secondary,
                     ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Die angeforderte Seite existiert nicht.',
-                style: Theme.of(context).textTheme.bodyText2,
+                style: theme.textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () {
-                  Navigator.of(context).pushNamedAndRemoveUntil('/', (r) => false);
+                  Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
                 },
                 child: const Text('Zur Startseite'),
               ),

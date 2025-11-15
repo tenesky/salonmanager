@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
-/// A page displayed when the user does not have permission to access
-/// a resource or feature.  This corresponds to HTTP 403 (Forbidden).
+/// Displays a 403 Forbidden page when the user lacks permission to
+/// access a route or resource.  Includes a button to return to the
+/// start page.
 class ForbiddenPage extends StatelessWidget {
   const ForbiddenPage({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Zugriff verweigert'),
@@ -20,25 +22,25 @@ class ForbiddenPage extends StatelessWidget {
               Icon(
                 Icons.block,
                 size: 64,
-                color: Theme.of(context).colorScheme.secondary,
+                color: theme.colorScheme.secondary,
               ),
               const SizedBox(height: 16),
               Text(
                 '403',
-                style: Theme.of(context).textTheme.headline3?.copyWith(
-                      color: Theme.of(context).colorScheme.secondary,
+                style: theme.textTheme.displayMedium?.copyWith(
+                      color: theme.colorScheme.secondary,
                     ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Du hast keine Berechtigung, diese Seite zu sehen.',
-                style: Theme.of(context).textTheme.bodyText2,
+                style: theme.textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () {
-                  Navigator.of(context).pushNamedAndRemoveUntil('/', (r) => false);
+                  Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
                 },
                 child: const Text('Zur Startseite'),
               ),

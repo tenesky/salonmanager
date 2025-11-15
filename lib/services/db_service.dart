@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:typed_data';
 // The PostgREST classes are used for compatibility extensions below.
 import 'package:postgrest/postgrest.dart';
 import 'package:flutter/foundation.dart';
@@ -150,7 +151,7 @@ class DbService {
     if (response.error != null) {
       throw response.error!;
     }
-    final Map<String, dynamic> data = Map<String, dynamic>.from(response.data ?? {});
+    final Map<String, dynamic> data = response.data as Map<String, dynamic>;
     return data['id'] as int;
   }
 
@@ -505,14 +506,14 @@ class DbService {
       List<int> fileBytes, String fileName) async {
     const String bucket = 'salon-logos';
     final String filePath = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
-    final uploadResponse =
-        await _client.storage.from(bucket).uploadBinary(filePath, fileBytes);
-    // The returned object contains an `error` field if the upload fails.
-    if (uploadResponse.error != null) {
-      throw uploadResponse.error!;
-    }
-    final String publicUrl =
-        _client.storage.from(bucket).getPublicUrl(filePath);
+    // Convert the provided List<int> to Uint8List because the
+    // uploadBinary method expects Uint8List.  If the upload fails an
+    // exception will be thrown which can be caught by the caller.
+    final bytes = Uint8List.fromList(fileBytes);
+    await _client.storage.from(bucket).uploadBinary(filePath, bytes);
+    // Return the public URL of the uploaded file.  Supabase will
+    // automatically throw on failure.
+    final String publicUrl = _client.storage.from(bucket).getPublicUrl(filePath);
     return publicUrl;
   }
 
@@ -557,7 +558,7 @@ class DbService {
     if (response.error != null) {
       throw response.error!;
     }
-    final Map<String, dynamic> data = Map<String, dynamic>.from(response.data);
+    final Map<String, dynamic> data = response.data as Map<String, dynamic>;
     return data['id'] as int;
   }
 
@@ -868,6 +869,264 @@ class DbService {
     };
   }
 
+  /// Retrieves the current loyalty program for the platform or salon.
+  ///
+  /// This helper returns the first entry in the `loyalty_programs` table
+  /// which defines the points per currency unit, level thresholds and
+  /// available rewards. The `level_thresholds` and `rewards` columns are
+  /// stored as JSONB in the database and are returned as decoded Dart
+  /// structures (Map and List respectively). If no program exists the
+  /// return value is `null`.
+  static Future<Map<String, dynamic>?> getLoyaltyProgram() async {
+    final response = await _client
+        .from('loyalty_programs')
+        .select('id, points_per_currency, level_thresholds, rewards, is_active')
+        .limit(1)
+        .maybeSingle()
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data;
+    if (data == null) {
+      return null;
+    }
+    // Decode JSON fields. Supabase returns JSON columns as dynamic
+    // maps/lists already, but we defensively cast to Map/List for type
+    // safety.
+    final levels = data['level_thresholds'];
+    final rewards = data['rewards'];
+    return {
+      'id': data['id'],
+      'pointsPerCurrency': data['points_per_currency'],
+      'levelThresholds': levels is Map ? Map<String, dynamic>.from(levels) : <String, dynamic>{},
+      'rewards': rewards is List ? List<Map<String, dynamic>>.from(rewards.map((e) => Map<String, dynamic>.from(e))) : <Map<String, dynamic>>[],
+      'isActive': data['is_active'] ?? true,
+    };
+  }
+
+  /// Creates or updates the loyalty program.  If a program with the given
+  /// [programId] exists, its data is updated; otherwise a new program
+  /// record is inserted.  The [pointsPerCurrency] defines how many
+  /// loyalty points are earned per unit of currency spent.  The
+  /// [levelThresholds] map associates a loyalty level name (e.g.
+  /// 'Bronze', 'Silber', 'Gold') with the number of points required to
+  /// reach that level.  The [rewards] list contains objects with keys
+  /// `name`, `description` and `points`.  Throws on error.
+  static Future<void> upsertLoyaltyProgram({
+    String? programId,
+    required double pointsPerCurrency,
+    required Map<String, dynamic> levelThresholds,
+    required List<Map<String, dynamic>> rewards,
+    bool isActive = true,
+  }) async {
+    // Prepare the payload.  Supabase will store the map/list directly in
+    // JSONB columns.  When upserting, you must include the primary key
+    // (`id`) if updating an existing record.
+    final payload = <String, dynamic>{
+      'points_per_currency': pointsPerCurrency,
+      'level_thresholds': levelThresholds,
+      'rewards': rewards,
+      'is_active': isActive,
+    };
+    if (programId != null) {
+      payload['id'] = programId;
+    }
+    final response = await _client
+        .from('loyalty_programs')
+        .upsert(payload)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Calculates the loyalty status for the currently logged in user.  The
+  /// returned map contains the customer's `points`, their current
+  /// `level`, the `nextLevelName` (or null if the highest level), the
+  /// number of points required to reach the next level (`pointsToNext`),
+  /// and a list of `availableRewards` (each with `name`, `description`
+  /// and `points`).  This function automatically resolves the
+  /// `customer_id` from the current user's email in the `customers`
+  /// table and falls back to zero points if none is found.  Rewards
+  /// become available when the customer's points meet or exceed the
+  /// specified `points` cost.  Throws on network or query errors.
+  static Future<Map<String, dynamic>> getLoyaltyStatus() async {
+    // Resolve customer ID based on the logged in user's email.  If the
+    // user is not logged in or has no matching customer record, they
+    // have zero points by default.
+    final email = _client.auth.currentUser?.email;
+    int? customerId;
+    if (email != null) {
+      final customerResp = await _client
+          .from('customers')
+          .select('id')
+          .eq('email', email)
+          .maybeSingle()
+          .execute();
+      if (customerResp.error != null) {
+        throw customerResp.error!;
+      }
+      final cust = customerResp.data;
+      if (cust != null && cust['id'] != null) {
+        customerId = cust['id'] as int?;
+      }
+    }
+    // Fetch points from customer_loyalty_points table.
+    int points = 0;
+    if (customerId != null) {
+      final pointsResp = await _client
+          .from('customer_loyalty_points')
+          .select('points')
+          .eq('customer_id', customerId)
+          .maybeSingle()
+          .execute();
+      if (pointsResp.error != null) {
+        throw pointsResp.error!;
+      }
+      final row = pointsResp.data;
+      if (row != null && row['points'] != null) {
+        points = (row['points'] as int?) ?? 0;
+      }
+    }
+    // Fetch loyalty program.  If none exists, default to empty config.
+    final program = await getLoyaltyProgram();
+    Map<String, dynamic> levelThresholds;
+    List<Map<String, dynamic>> rewards;
+    if (program != null) {
+      levelThresholds = Map<String, dynamic>.from(program['levelThresholds'] as Map);
+      rewards = List<Map<String, dynamic>>.from(program['rewards'] as List);
+    } else {
+      levelThresholds = {};
+      rewards = [];
+    }
+    // Determine current level and next level based on thresholds.
+    String currentLevel = '';
+    String? nextLevelName;
+    int? nextLevelPoints;
+    if (levelThresholds.isNotEmpty) {
+      // Sort levels by threshold ascending.
+      final sorted = levelThresholds.entries.toList()
+        ..sort((a, b) => (a.value as num).compareTo(b.value as num));
+      for (int i = 0; i < sorted.length; i++) {
+        final name = sorted[i].key;
+        final threshold = (sorted[i].value as num).toInt();
+        if (points < threshold) {
+          nextLevelName = name;
+          nextLevelPoints = threshold;
+          break;
+        }
+        currentLevel = name;
+      }
+      // If points exceed all thresholds, there is no next level.
+    }
+    int pointsToNext = 0;
+    if (nextLevelPoints != null) {
+      pointsToNext = nextLevelPoints - points;
+    }
+    // Filter rewards that can be redeemed.  We consider a reward
+    // available if it has a `points` property and the customer has
+    // enough points.  Rewards without a points cost are always
+    // available.
+    final List<Map<String, dynamic>> availableRewards = [];
+    for (final r in rewards) {
+      final int cost = (r['points'] as num?)?.toInt() ?? 0;
+      if (points >= cost) {
+        availableRewards.add(r);
+      }
+    }
+    return {
+      'points': points,
+      'level': currentLevel,
+      'nextLevelName': nextLevelName,
+      'pointsToNext': pointsToNext,
+      'availableRewards': availableRewards,
+    };
+  }
+
+  /// Redeems a loyalty reward for the currently logged in user.  The
+  /// [reward] must contain at least the keys `name` and `points`.  The
+  /// customer's points are reduced by the cost of the reward (if
+  /// sufficient) and a redemption record is inserted into
+  /// `loyalty_redemptions`.  Throws if the user is not logged in, no
+  /// customer record exists or a database error occurs.
+  static Future<void> redeemReward(Map<String, dynamic> reward) async {
+    final email = _client.auth.currentUser?.email;
+    if (email == null) {
+      throw Exception('Nicht angemeldet');
+    }
+    // Resolve customer ID.
+    final customerResp = await _client
+        .from('customers')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle()
+        .execute();
+    if (customerResp.error != null) {
+      throw customerResp.error!;
+    }
+    final cust = customerResp.data;
+    if (cust == null || cust['id'] == null) {
+      throw Exception('Kein Kundenkonto gefunden');
+    }
+    final customerId = cust['id'] as int;
+    // Determine current points and row id.
+    final pointsResp = await _client
+        .from('customer_loyalty_points')
+        .select('id, points')
+        .eq('customer_id', customerId)
+        .maybeSingle()
+        .execute();
+    if (pointsResp.error != null) {
+      throw pointsResp.error!;
+    }
+    final row = pointsResp.data;
+    int currentPoints = 0;
+    int? rowId;
+    if (row != null) {
+      rowId = row['id'] as int?;
+      currentPoints = (row['points'] as int?) ?? 0;
+    }
+    final cost = (reward['points'] as num?)?.toInt() ?? 0;
+    if (currentPoints < cost) {
+      throw Exception('Nicht genügend Punkte');
+    }
+    final newPoints = currentPoints - cost;
+    // Update or insert loyalty points row.
+    if (rowId != null) {
+      final updateResp = await _client
+          .from('customer_loyalty_points')
+          .update({'points': newPoints})
+          .match({'id': rowId})
+          .execute();
+      if (updateResp.error != null) {
+        throw updateResp.error!;
+      }
+    } else {
+      // Insert new row
+      final insertResp = await _client
+          .from('customer_loyalty_points')
+          .insert({'customer_id': customerId, 'points': newPoints})
+          .execute();
+      if (insertResp.error != null) {
+        throw insertResp.error!;
+      }
+    }
+    // Insert redemption record.  Use null for salon_id as the program
+    // may not be tied to a specific salon.
+    final insertRedemption = await _client
+        .from('loyalty_redemptions')
+        .insert({
+      'customer_id': customerId,
+      'salon_id': null,
+      'points_used': cost,
+      'reward_description': reward['name'] ?? 'Reward',
+    }).execute();
+    if (insertRedemption.error != null) {
+      throw insertRedemption.error!;
+    }
+  }
+
   /// Uploads a CSV report to Supabase storage.  The file is saved
   /// under the `reports` bucket with a timestamped filename.  Returns
   /// the public URL for downloading the report.  Throws on error.
@@ -875,11 +1134,11 @@ class DbService {
     const bucket = 'reports';
     final path = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
     final bytes = utf8.encode(csvContent);
-    final uploadResponse =
-        await _client.storage.from(bucket).uploadBinary(path, bytes);
-    if (uploadResponse.error != null) {
-      throw uploadResponse.error!;
-    }
+    // Convert to Uint8List before uploading.  The uploadBinary method
+    // will throw on error.  We do not check an error field as the
+    // returned type may differ across versions.
+    final data = Uint8List.fromList(bytes);
+    await _client.storage.from(bucket).uploadBinary(path, data);
     final publicUrl = _client.storage.from(bucket).getPublicUrl(path);
     return publicUrl;
   }
@@ -1451,7 +1710,7 @@ class DbService {
     if (response.error != null) {
       throw response.error!;
     }
-    final Map<String, dynamic> data = Map<String, dynamic>.from(response.data ?? {});
+    final Map<String, dynamic> data = response.data as Map<String, dynamic>;
     return data['id'] as int;
   }
 
@@ -1476,7 +1735,7 @@ class DbService {
     if (response.error != null) {
       throw response.error!;
     }
-    final Map<String, dynamic> data = Map<String, dynamic>.from(response.data ?? {});
+    final Map<String, dynamic> data = response.data as Map<String, dynamic>;
     return data['id'] as int;
   }
 

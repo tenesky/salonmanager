@@ -227,7 +227,7 @@ class _ReportsPageState extends State<ReportsPage> {
       final count = (item['count'] as int?) ?? 0;
       final pct = total > 0 ? count / total : 0;
       sections.add(PieChartSectionData(
-        value: pct,
+        value: pct.toDouble(),
         title: '${(pct * 100).toStringAsFixed(0)}%',
         color: Colors.primaries[i % Colors.primaries.length],
         radius: 50,

@@ -52,6 +52,8 @@ import 'features/settings/pages/reminder_settings_page.dart';
 // Import the loyalty overview page. This page shows the customer's points,
 // level and available rewards. It implements Screen 53 (Treue‑Übersicht).
 import 'features/loyalty/pages/loyalty_overview_page.dart';
+import 'features/loyalty/pages/loyalty_rules_page.dart';
+import 'features/loyalty/pages/loyalty_rules_page.dart';
 // Import service setup page for configuring price and duration per stylist
 // per service. This page shows a matrix of services and stylists with
 // editable cells for price, duration and activation state【73678961014422†L1515-L1519】.
@@ -110,7 +112,11 @@ import 'features/pos/pages/pos_page.dart';
 
 // Import theme
 import 'core/theme.dart';
-// Import connectivity provider and system pages for offline, maintenance and error handling.
+
+// Import connectivity provider and system pages for offline, maintenance
+// and error handling.  These provide overlays and fallback screens
+// when the device is offline, the backend is under maintenance, a route
+// is forbidden or not found.
 import 'core/connectivity_provider.dart';
 import 'features/system/pages/offline_page.dart';
 import 'features/system/pages/maintenance_page.dart';
@@ -126,7 +132,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Wrap the app in a ValueListenableBuilder to react to offline status.
+    // Listen to connectivity changes and overlay an offline page when
+    // the device is offline.  The MaterialApp is wrapped in a Stack
+    // so the OfflinePage can sit on top of the entire UI.
     return ValueListenableBuilder<bool>(
       valueListenable: ConnectivityProvider.instance.isOffline,
       builder: (context, offline, child) {
@@ -147,7 +155,7 @@ class MyApp extends StatelessWidget {
         '/two-factor': (context) => const TwoFactorPage(),
         '/register-customer': (context) => const RegisterCustomerPage(),
         '/register-salon': (context) => const RegisterSalonPage(),
-        '/register-admin': (context) => const RegisterAdminPage(),
+        '/register-admin': (context) => RegisterAdminPage(),
         '/forgot-password': (context) => const ForgotPasswordPage(),
         '/reset-password': (context) => const ResetPasswordPage(),
         '/home': (context) => const HomePage(),
@@ -180,7 +188,7 @@ class MyApp extends StatelessWidget {
         '/inventory/products': (context) => const ProductListPage(),
         // Global search page showing results in tabs for salons, services and stylists.
         '/search': (context) => const GlobalSearchPage(),
-        '/inbox': (context) => const InboxPage(),
+        '/inbox': (context) => InboxPage(),
         '/onboarding-customer': (context) => const OnboardingCustomerPage(),
         '/onboarding-salon': (context) => const OnboardingSalonPage(),
         // Interactive map view. Users can explore salons on a map and
@@ -269,6 +277,9 @@ class MyApp extends StatelessWidget {
         // current points, level and rewards. Implements Screen 53
         // (Treue‑Übersicht) with static demo data for now.
         '/loyalty': (context) => const LoyaltyOverviewPage(),
+        // Route to configure loyalty thresholds and rewards.  Allows
+        // salon owners to manage level thresholds and reward definitions.
+        '/loyalty/rules': (context) => LoyaltyRulesPage(),
         // Legal notice page. Displays company information required by law.
         '/impressum': (context) => const ImpressumPage(),
         // Route to the service setup page. This screen presents a matrix
@@ -353,7 +364,7 @@ class MyApp extends StatelessWidget {
         '/gallery/detail': (context) => const GalleryDetailPage(),
         // Analytics dashboard. Provides an overview of revenue, utilisation,
         // top services, no‑show rates, loyalty and inventory KPIs.
-        '/reports': (context) => const ReportsPage(),
+        '/reports': (context) => ReportsPage(),
 
         // Routes for salon profile editing and service catalogue editing.
         // The SalonProfilePage allows salon owners to change branding
@@ -364,24 +375,15 @@ class MyApp extends StatelessWidget {
         // and "Service‑Katalog" requirements from the Pflichtenheft.
         '/salon/profile': (context) => const SalonProfilePage(),
         '/salon/services': (context) => const ServicesEditorPage(),
-        // System pages for maintenance, forbidden and offline states.  The
-        // offline page is also shown as an overlay via the connectivity provider.
+        // System pages for maintenance, forbidden, offline and not‑found.
         '/offline': (context) => const OfflinePage(),
         '/maintenance': (context) => const MaintenancePage(),
         '/403': (context) => const ForbiddenPage(),
         '/404': (context) => const NotFoundPage(),
       },
-              onUnknownRoute: (settings) {
-                // When an unknown route is requested, show the 404 page.
-                return MaterialPageRoute(builder: (context) => const NotFoundPage());
-              },
+              onUnknownRoute: (settings) =>
+                  MaterialPageRoute(builder: (context) => const NotFoundPage()),
             ),
-            // Show the offline overlay if the connectivity provider
-            // indicates the device is offline.  This overlay sits on top of
-            // the entire app and prevents interaction until the connection
-            // returns.  When the user taps "Erneut versuchen", the
-            // provider rechecks connectivity and this overlay will
-            // disappear automatically.
             if (offline) const OfflinePage(),
           ],
         );

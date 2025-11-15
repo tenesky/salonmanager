@@ -399,6 +399,19 @@ class _SalonProfilePageState extends State<SalonProfilePage> {
                 child: const Text('Speichern'),
               ),
             ),
+            const SizedBox(height: 12),
+            // Button to navigate to loyalty rules editor. Only visible to
+            // salon owners or administrators.  Opens the loyalty rules
+            // page where level thresholds and rewards can be configured.
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.of(context).pushNamed('/loyalty/rules');
+                },
+                child: const Text('Treue‑Regeln bearbeiten'),
+              ),
+            ),
           ],
         ),
       ),
