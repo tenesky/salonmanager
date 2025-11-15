@@ -1496,6 +1496,65 @@ class DbService {
     return data.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
+  /// Checks whether a salon with the given [name] already exists.  The
+  /// comparison is case‑insensitive. Returns `true` if a salon record
+  /// with the same name is found, otherwise `false`. Throws on
+  /// unexpected database errors.
+  static Future<bool> doesSalonExist(String name) async {
+    final sanitized = name.trim();
+    if (sanitized.isEmpty) {
+      return false;
+    }
+    final response = await _client
+        .from('salons')
+        .select('id')
+        .ilike('name', sanitized)
+        .limit(1)
+        .maybeSingle()
+        .execute();
+    // If the status is 404 or 406, no matching row exists; return false.
+    if (response.error != null) {
+      // ignore 406 or 404 as they mean no record.
+      if (response.status == 404 || response.status == 406) {
+        return false;
+      }
+      throw response.error!;
+    }
+    return response.data != null;
+  }
+
+  /// Inserts a new salon into the database and returns its id.  The
+  /// [ownerId] should be the id of the authenticated user who
+  /// registers the salon. The [name] is required. The [address] can
+  /// be null.  New salons are created with status 'approved' so they
+  /// appear immediately on the map; adjust this if manual approval is
+  /// desired. Throws on error.
+  static Future<String> addSalon({
+    required String ownerId,
+    required String name,
+    String? address,
+  }) async {
+    final insertData = <String, dynamic>{
+      'owner_id': ownerId,
+      'name': name,
+      'status': 'approved',
+    };
+    if (address != null && address.trim().isNotEmpty) {
+      insertData['address'] = address.trim();
+    }
+    final response = await _client
+        .from('salons')
+        .insert(insertData)
+        .select('id')
+        .single()
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as Map<String, dynamic>;
+    return data['id'] as String;
+  }
+
   // ---------------------------------------------------------------------------
   // Booking management (incoming, cancel, today/upcoming)
   // ---------------------------------------------------------------------------

@@ -40,11 +40,24 @@ class _RegisterAdminPageState extends State<RegisterAdminPage> {
     });
     try {
       await AuthService.signUpWithPassword(email: email, password: password);
-      await AuthService.sendOtpForExistingUser(email);
+      // Attempt to send the OTP for two‑factor authentication. Even if the
+      // send fails we still navigate to the code entry page so the user
+      // can request a new code.
+      bool otpSent = false;
+      try {
+        await AuthService.sendOtpForExistingUser(email);
+        otpSent = true;
+      } catch (_) {}
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Admin‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
-      );
+      if (otpSent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Admin‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Admin‑Registrierung erfolgreich. Code konnte nicht gesendet werden.')),
+        );
+      }
       Navigator.of(context).pushNamed('/two-factor', arguments: {'email': email});
     } catch (error) {
       if (!mounted) return;

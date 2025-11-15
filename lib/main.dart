@@ -22,6 +22,8 @@ Future<void> main() async {
     url: 'https://tojygtbhddmlgyilgcyj.supabase.co',
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvanlndGJoZGRtbGd5aWxnY3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDA2MDksImV4cCI6MjA3ODQ3NjYwOX0.j0IoIRZZQfX_FS0lHd1xOpE5pUfEQ9lsKi5sX2vtIJg',
+    // Sessions persist across app launches and tokens refresh automatically by default
+    // in supabase_flutter v2.x, so explicit AuthOptions are not required.
   );
   // Initialize connectivity monitoring so the offline overlay works from
   // the very start of the app.

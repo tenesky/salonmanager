@@ -117,21 +117,8 @@ class WelcomePage extends StatelessWidget {
                     },
                     child: const Text('Salon‑Owner registrieren'),
                   ),
-                  const SizedBox(height: 16),
-                  // Admin registration
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: secondary,
-                      foregroundColor: onSecondary,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      textStyle: const TextStyle(fontSize: 16),
-                    ),
-                    onPressed: () {
-                      Navigator.of(context).pushNamed('/register-admin');
-                    },
-                    child: const Text('Admin registrieren'),
-                  ),
-                  const SizedBox(height: 16),
+                  // Hinweis: Der Admin‑Registrierungsbutton wurde entfernt, da
+                  // Administratoren nur vom Hauptadmin angelegt werden können.
                   // Guest access
                   OutlinedButton(
                     style: OutlinedButton.styleFrom(

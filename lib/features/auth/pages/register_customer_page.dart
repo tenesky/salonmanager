@@ -42,15 +42,28 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
       _loading = true;
     });
     try {
-      // Create the user in Supabase Auth using email/password.  Names are
-      // collected but not yet stored on the backend.  Role assignment
-      // happens server‑side.
+      // Register the user using email/password. Names are collected but
+      // not yet persisted. This will throw if the email already exists.
       await AuthService.signUpWithPassword(email: email, password: password);
-      await AuthService.sendOtpForExistingUser(email);
+      // Attempt to send a 6‑digit code. Even if sending fails, we
+      // continue to the next page so the user can request a new code.
+      bool otpSent = false;
+      try {
+        await AuthService.sendOtpForExistingUser(email);
+        otpSent = true;
+      } catch (_) {
+        // ignore OTP error
+      }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registrierungs‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
-      );
+      if (otpSent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Registrierungs‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Registrierung erfolgreich. Code konnte nicht gesendet werden.')),
+        );
+      }
       Navigator.of(context).pushNamed('/two-factor', arguments: {'email': email});
     } catch (error) {
       if (!mounted) return;

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../services/auth_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../services/db_service.dart';
 
 /// Registration screen for new salon owners.
 ///
@@ -41,18 +43,65 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
     if (!_formKey.currentState!.validate()) return;
     final email = _emailController.text.trim();
     final password = _passwordController.text;
+    final salonName = _salonNameController.text.trim();
+    final salonAddress = _salonAddressController.text.trim();
+    // Prevent registration if a salon with the same name already exists.
+    try {
+      final exists = await DbService.doesSalonExist(salonName);
+      if (exists) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Ein Salon mit diesem Namen existiert bereits.')),
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler bei der Überprüfung des Salons: $e')),
+        );
+      }
+      return;
+    }
     setState(() {
       _loading = true;
     });
     try {
       // Register the salon owner using email/password.
       await AuthService.signUpWithPassword(email: email, password: password);
-      // Send a 6‑digit code to complete two‑factor sign up.
-      await AuthService.sendOtpForExistingUser(email);
+
+      // After successful sign up, create the salon record in the database.
+      try {
+        final ownerId = Supabase.instance.client.auth.currentUser?.id;
+        if (ownerId != null) {
+          await DbService.addSalon(ownerId: ownerId, name: salonName, address: salonAddress.isEmpty ? null : salonAddress);
+        }
+      } catch (e) {
+        // If adding the salon fails, show an error but continue to OTP flow
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Fehler beim Anlegen des Salons: $e')),
+          );
+        }
+      }
+      // Try to send the OTP. Navigate regardless of success so the
+      // user can enter the code or request a new one.
+      bool otpSent = false;
+      try {
+        await AuthService.sendOtpForExistingUser(email);
+        otpSent = true;
+      } catch (_) {}
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registrierungs‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
-      );
+      if (otpSent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Registrierungs‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Registrierung erfolgreich. Code konnte nicht gesendet werden.')),
+        );
+      }
       Navigator.of(context).pushNamed('/two-factor', arguments: {'email': email});
     } catch (error) {
       if (!mounted) return;

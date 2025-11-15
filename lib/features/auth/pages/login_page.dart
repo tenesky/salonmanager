@@ -24,8 +24,10 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  /// Sends an OTP to the entered email address via Supabase. Upon
-  /// success, navigates to the 2FA page with the email as an argument.
+  /// Handles the login process and ensures that the user is always
+  /// forwarded to the 2FA page after a successful credential check,
+  /// even if sending the OTP fails. This avoids scenarios where
+  /// valid credentials result in no navigation due to an OTP error.
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final email = _emailController.text.trim();
@@ -34,24 +36,35 @@ class _LoginPageState extends State<LoginPage> {
       _loading = true;
     });
     try {
-      // First sign in with email and password. This will throw if the
-      // credentials are invalid.
+      // First sign in with email and password. This will throw if
+      // the credentials are invalid.
       await AuthService.signInWithPassword(email: email, password: password);
-      // After a successful password login, send a one‑time code for
-      // two‑factor authentication. The user must verify this code to
-      // complete login.
-      await AuthService.sendOtpForExistingUser(email);
+      // Attempt to send a one‑time code for two‑factor authentication.
+      bool otpSent = false;
+      try {
+        await AuthService.sendOtpForExistingUser(email);
+        otpSent = true;
+      } catch (_) {
+        // Ignore OTP errors here; we'll still navigate to the code page.
+      }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
-      );
+      if (otpSent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Anmeldung erfolgreich. Falls kein Code ankommt, bitte erneut senden.')),
+        );
+      }
       Navigator.of(context).pushNamed('/two-factor', arguments: {
         'email': email,
       });
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Fehler beim Login oder Senden des Codes: $error')),
+        SnackBar(content: Text('Fehler beim Login: $error')),
       );
     } finally {
       if (mounted) {
