@@ -87,6 +87,25 @@ class AuthService {
     await _client.auth.resetPasswordForEmail(email);
   }
 
+  /// Invites a new user via Supabase Auth.  Only callers with
+  /// sufficient privileges (e.g. platform admins or service role
+  /// keys) can use this method.  The [email] must belong to the
+  /// prospective team member.  Returns the invited user's id on
+  /// success, or null if the invite fails.  Throws an exception
+  /// for network errors.  Use this in combination with
+  /// [DbService.updateSalonMemberRole] after the user accepts the
+  /// invitation.
+  static Future<String?> inviteUser(String email) async {
+    try {
+      final admin = _client.auth.admin;
+      final response = await admin.inviteUserByEmail(email: email);
+      final user = response.user;
+      return user?.id;
+    } on AuthException catch (e) {
+      throw e;
+    }
+  }
+
   /// Verifies a recovery OTP code and updates the user's password. Returns
   /// true on success. When the recovery code is verified Supabase will
   /// establish a temporary session which allows updating the user's

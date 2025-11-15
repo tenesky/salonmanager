@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:postgrest/postgrest.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 
 /// A lightweight data service that wraps Supabase operations.  This
 /// service exposes high‑level methods used throughout the app to
@@ -181,6 +182,75 @@ class DbService {
     }
   }
 
+  /// Retrieves messages from the `messages` table.  Messages can be
+  /// filtered by [type] (e.g. 'system', 'customer', 'team').  If
+  /// [type] is null, all message types are returned.  The query
+  /// automatically filters messages to those addressed to the current
+  /// user (or broadcasts when the `user_id` column is null) and sorts
+  /// them with the most recent first.  Each map contains `id`,
+  /// `user_id`, `sender`, `type`, `content`, `read` and
+  /// `created_at`.
+  static Future<List<Map<String, dynamic>>> getMessages({String? type}) async {
+    final userId = _client.auth.currentUser?.id;
+    dynamic query = _client
+        .from('messages')
+        .select('id, user_id, sender, type, content, read, created_at');
+    if (type != null) {
+      query = query.eq('type', type);
+    }
+    // Only return messages addressed to the current user or broadcast
+    if (userId != null) {
+      query = query.or('user_id.eq.$userId,user_id.is.null');
+    }
+    query = query.order('created_at', ascending: false);
+    final response = await query.execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  /// Marks a message as read by setting the `read` flag to true.
+  /// Throws an exception if the update fails.
+  static Future<void> markMessageRead(int id) async {
+    final response = await _client
+        .from('messages')
+        .update({'read': true})
+        .eq('id', id)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Sends a new message.  The [type] determines which tab the
+  /// message appears on ('system', 'customer', 'team').  If
+  /// [recipientUserId] is provided the message is addressed to a
+  /// single user; otherwise it is considered a broadcast (for system
+  /// or team messages).  The sender's email is taken from the
+  /// current auth session.  Throws if the insert fails.
+  static Future<void> sendMessage({
+    required String type,
+    required String content,
+    String? recipientUserId,
+  }) async {
+    final senderEmail = _client.auth.currentUser?.email ?? 'unknown';
+    final Map<String, dynamic> data = {
+      'type': type,
+      'content': content,
+      'sender': senderEmail,
+      'read': false,
+    };
+    if (recipientUserId != null) {
+      data['user_id'] = recipientUserId;
+    }
+    final response = await _client.from('messages').insert(data).execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
   /// Updates contact details for a customer.  Any of the fields
   /// [email], [phone] or [marketingOptIn] may be provided.  Fields
   /// that are null are not modified.  Throws an error if the update
@@ -208,6 +278,88 @@ class DbService {
         .from('customers')
         .update(updateData)
         .eq('id', id)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Returns a list of all salon members.  Each map contains
+  /// `salon_id`, `user_id`, `role` and `active` fields.  The
+  /// `salon_members` table is expected to have an `active` boolean
+  /// column as suggested in the team management specification.  If
+  /// the query fails, an exception is thrown.  Note that this
+  /// implementation does not join with the `profiles` or `users`
+  /// tables to fetch names or emails; those can be retrieved
+  /// separately if needed.
+  static Future<List<Map<String, dynamic>>> getSalonMembers() async {
+    final response = await _client
+        .from('salon_members')
+        .select('salon_id, user_id, role, active')
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  /// Updates the role of a salon member identified by [salonId] and
+  /// [userId].  The [role] must be one of 'salon_admin', 'manager',
+  /// 'stylist' or 'azubi'.  Throws an exception if the update fails.
+  static Future<void> updateSalonMemberRole({
+    required String salonId,
+    required String userId,
+    required String role,
+  }) async {
+    final response = await _client
+        .from('salon_members')
+        .update({'role': role})
+        .eq('salon_id', salonId)
+        .eq('user_id', userId)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Updates the active status of a salon member.  If [active] is
+  /// false the member will be considered deactivated and should no
+  /// longer have access to the salon's resources.  Throws on error.
+  static Future<void> updateSalonMemberActive({
+    required String salonId,
+    required String userId,
+    required bool active,
+  }) async {
+    final response = await _client
+        .from('salon_members')
+        .update({'active': active})
+        .eq('salon_id', salonId)
+        .eq('user_id', userId)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Adds a new salon member record.  This should be called after
+  /// inviting a user via [AuthService.inviteUser] and obtaining their
+  /// `userId`.  The record links the user to the salon with the given
+  /// [role] and sets their `active` status.  Throws on error.
+  static Future<void> addSalonMember({
+    required String salonId,
+    required String userId,
+    required String role,
+    bool active = true,
+  }) async {
+    final response = await _client
+        .from('salon_members')
+        .insert({
+          'salon_id': salonId,
+          'user_id': userId,
+          'role': role,
+          'active': active,
+        })
         .execute();
     if (response.error != null) {
       throw response.error!;
@@ -268,6 +420,468 @@ class DbService {
       }
     }
     return transactionId;
+  }
+
+  /// Retrieves the salon profile for the current user.  The salon is
+  /// identified by the `owner_id` equal to the current user's id.  If no
+  /// salon is found the method returns `null`.  The returned map
+  /// contains all columns from the `salons` table.
+  static Future<Map<String, dynamic>?> getSalonProfile() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      return null;
+    }
+    final response = await _client
+        .from('salons')
+        .select()
+        .eq('owner_id', userId)
+        .single()
+        .execute();
+    if (response.error != null) {
+      // If no salon exists for this owner return null instead of throwing.
+      if (response.status == 406 || response.status == 404) {
+        return null;
+      }
+      throw response.error!;
+    }
+    final data = response.data;
+    if (data == null) {
+      return null;
+    }
+    return Map<String, dynamic>.from(data);
+  }
+
+  /// Updates fields of the salon profile.  Only fields that are provided
+  /// (non-null) are modified.  The [salonId] must be the id of the salon
+  /// record to update.  Returns a future that completes when the
+  /// update succeeds or throws on error.
+  static Future<void> updateSalonProfile({
+    required String salonId,
+    String? name,
+    String? address,
+    String? phone,
+    String? website,
+    String? primaryColor,
+    String? accentColor,
+    String? blockOrder,
+    String? openingHours,
+    String? legalText,
+    bool? useDefaultLegalText,
+    String? logoUrl,
+  }) async {
+    final Map<String, dynamic> updateData = {};
+    if (name != null) updateData['name'] = name;
+    if (address != null) updateData['address'] = address;
+    if (phone != null) updateData['phone'] = phone;
+    if (website != null) updateData['website'] = website;
+    if (primaryColor != null) updateData['primary_color'] = primaryColor;
+    if (accentColor != null) updateData['accent_color'] = accentColor;
+    if (blockOrder != null) updateData['block_order'] = blockOrder;
+    if (openingHours != null) updateData['opening_hours'] = openingHours;
+    if (legalText != null) updateData['legal_text'] = legalText;
+    if (useDefaultLegalText != null) {
+      updateData['use_default_legal_text'] = useDefaultLegalText;
+    }
+    if (logoUrl != null) updateData['logo_url'] = logoUrl;
+    if (updateData.isEmpty) {
+      return;
+    }
+    final response = await _client
+        .from('salons')
+        .update(updateData)
+        .eq('id', salonId)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Uploads a salon logo to Supabase storage.  The [fileBytes]
+  /// parameter should contain the binary data of the image, and
+  /// [fileName] should include the extension (e.g. mylogo.png).  The
+  /// file is stored in a dedicated bucket called `salon-logos`.  The
+  /// returned string is the public URL to access the uploaded file.
+  static Future<String> uploadSalonLogo(
+      List<int> fileBytes, String fileName) async {
+    const String bucket = 'salon-logos';
+    final String filePath = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
+    final uploadResponse =
+        await _client.storage.from(bucket).uploadBinary(filePath, fileBytes);
+    // The returned object contains an `error` field if the upload fails.
+    if (uploadResponse.error != null) {
+      throw uploadResponse.error!;
+    }
+    final String publicUrl =
+        _client.storage.from(bucket).getPublicUrl(filePath);
+    return publicUrl;
+  }
+
+  /// Retrieves all services.  Each map includes the service id, name,
+  /// category, price, duration and description.  Results are ordered by
+  /// name.  Throws on error.
+  static Future<List<Map<String, dynamic>>> getAllServices() async {
+    final response = await _client
+        .from('services')
+        .select('id, name, category, price, duration, description')
+        .order('name')
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  /// Inserts a new service record and returns the created id.  The
+  /// [category] should correspond to the service category (e.g.
+  /// 'Damen', 'Herren', 'Bart', 'Spezial').  Throws on error.
+  static Future<int> addService({
+    required String name,
+    required String category,
+    required int duration,
+    required num price,
+    String? description,
+  }) async {
+    final response = await _client
+        .from('services')
+        .insert({
+          'name': name,
+          'category': category,
+          'duration': duration,
+          'price': price,
+          if (description != null) 'description': description,
+        })
+        .select('id')
+        .single()
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final Map<String, dynamic> data = Map<String, dynamic>.from(response.data);
+    return data['id'] as int;
+  }
+
+  /// Updates an existing service.  Only provided fields are updated.
+  /// Throws on error.
+  static Future<void> updateService({
+    required int id,
+    String? name,
+    String? category,
+    int? duration,
+    num? price,
+    String? description,
+  }) async {
+    final Map<String, dynamic> updateData = {};
+    if (name != null) updateData['name'] = name;
+    if (category != null) updateData['category'] = category;
+    if (duration != null) updateData['duration'] = duration;
+    if (price != null) updateData['price'] = price;
+    if (description != null) updateData['description'] = description;
+    if (updateData.isEmpty) {
+      return;
+    }
+    final response = await _client
+        .from('services')
+        .update(updateData)
+        .eq('id', id)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Deletes a service by id.  This permanently removes the record.
+  /// Throws on error.
+  static Future<void> deleteService(int id) async {
+    final response =
+        await _client.from('services').delete().eq('id', id).execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Calculates revenue totals within a given period.  Returns a map
+  /// with keys `totalRevenue` and `daily` where `daily` is a list of
+  /// objects with `date` (DateTime) and `total` (num) fields.  The
+  /// optional [salonId] filters to a specific salon.  Data is
+  /// aggregated client‑side after retrieving all transactions in
+  /// range.  Throws on error.
+  static Future<Map<String, dynamic>> getRevenueByPeriod({
+    required DateTime start,
+    required DateTime end,
+    String? salonId,
+  }) async {
+    var query = _client
+        .from('transactions')
+        .select('total_amount, created_at');
+    query = query.gte('created_at', start.toIso8601String());
+    query = query.lt('created_at', end.toIso8601String());
+    if (salonId != null) {
+      query = query.eq('salon_id', salonId);
+    }
+    final response = await query.execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    num totalRevenue = 0;
+    final Map<String, num> dailyTotals = {};
+    for (final item in data) {
+      final amount = item['total_amount'] as num? ?? 0;
+      final createdAtStr = item['created_at'] as String?;
+      if (createdAtStr != null) {
+        final date = DateTime.parse(createdAtStr).toLocal();
+        final dayKey = DateTime(date.year, date.month, date.day).toIso8601String();
+        dailyTotals[dayKey] = (dailyTotals[dayKey] ?? 0) + amount;
+        totalRevenue += amount;
+      }
+    }
+    final dailyList = dailyTotals.entries
+        .map((e) => {
+              'date': DateTime.parse(e.key),
+              'total': e.value,
+            })
+        .toList()
+      ..sort((a, b) => (a['date'] as DateTime)
+          .compareTo(b['date'] as DateTime));
+    return {
+      'totalRevenue': totalRevenue,
+      'daily': dailyList,
+    };
+  }
+
+  /// Computes utilisation per stylist between [start] and [end].  The
+  /// result is a list of maps with `stylist_id`, `bookedMinutes`,
+  /// `shiftMinutes` and `utilization` (0–1).  It fetches shifts and
+  /// bookings in the time range and aggregates durations per stylist.
+  static Future<List<Map<String, dynamic>>> getUtilizationByStylist({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    // Fetch shifts within range
+    final shiftsResponse = await _client
+        .from('shifts')
+        .select('stylist_id, duration, date, start_time')
+        .gte('date', DateFormat('yyyy-MM-dd').format(start))
+        .lte('date', DateFormat('yyyy-MM-dd').format(end))
+        .execute();
+    if (shiftsResponse.error != null) {
+      throw shiftsResponse.error!;
+    }
+    final shiftsData = shiftsResponse.data as List<dynamic>;
+    final Map<int, int> shiftMinutes = {};
+    for (final item in shiftsData) {
+      final sid = item['stylist_id'] as int?;
+      final duration = item['duration'] as int? ?? 0;
+      if (sid != null) {
+        shiftMinutes[sid] = (shiftMinutes[sid] ?? 0) + duration;
+      }
+    }
+    // Fetch bookings within range
+    final bookingsResponse = await _client
+        .from('bookings')
+        .select('stylist_id, duration, start_datetime')
+        .gte('start_datetime', start.toIso8601String())
+        .lt('start_datetime', end.toIso8601String())
+        .execute();
+    if (bookingsResponse.error != null) {
+      throw bookingsResponse.error!;
+    }
+    final bookingsData = bookingsResponse.data as List<dynamic>;
+    final Map<int, int> bookedMinutes = {};
+    for (final item in bookingsData) {
+      final sid = item['stylist_id'] as int?;
+      final duration = item['duration'] as int? ?? 0;
+      if (sid != null) {
+        bookedMinutes[sid] = (bookedMinutes[sid] ?? 0) + duration;
+      }
+    }
+    // Combine
+    final Set<int> stylistIds = {...shiftMinutes.keys, ...bookedMinutes.keys};
+    final List<Map<String, dynamic>> result = [];
+    for (final id in stylistIds) {
+      final shift = shiftMinutes[id] ?? 0;
+      final booked = bookedMinutes[id] ?? 0;
+      final util = shift > 0 ? booked / shift : 0;
+      result.add({
+        'stylist_id': id,
+        'bookedMinutes': booked,
+        'shiftMinutes': shift,
+        'utilization': util,
+      });
+    }
+    return result;
+  }
+
+  /// Returns the top N services by number of bookings in the given
+  /// period.  The result is a list of maps with `service_id`,
+  /// `name` and `count`.  Services with more bookings appear first.
+  static Future<List<Map<String, dynamic>>> getTopServices({
+    required DateTime start,
+    required DateTime end,
+    int limit = 5,
+  }) async {
+    // Fetch bookings with service id between dates
+    final bookingsResponse = await _client
+        .from('bookings')
+        .select('service_id')
+        .gte('start_datetime', start.toIso8601String())
+        .lt('start_datetime', end.toIso8601String())
+        .execute();
+    if (bookingsResponse.error != null) {
+      throw bookingsResponse.error!;
+    }
+    final bookingsData = bookingsResponse.data as List<dynamic>;
+    final Map<int, int> counts = {};
+    for (final item in bookingsData) {
+      final sid = item['service_id'] as int?;
+      if (sid != null) {
+        counts[sid] = (counts[sid] ?? 0) + 1;
+      }
+    }
+    // Fetch service names for those ids
+    final serviceIds = counts.keys.toList();
+    if (serviceIds.isEmpty) {
+      return [];
+    }
+    final servicesResponse = await _client
+        .from('services')
+        .select('id, name')
+        .in_('id', serviceIds)
+        .execute();
+    if (servicesResponse.error != null) {
+      throw servicesResponse.error!;
+    }
+    final servicesData = servicesResponse.data as List<dynamic>;
+    final Map<int, String> idToName = {};
+    for (final item in servicesData) {
+      final id = item['id'] as int?;
+      final name = item['name'] as String?;
+      if (id != null && name != null) {
+        idToName[id] = name;
+      }
+    }
+    // Build list and sort
+    final List<Map<String, dynamic>> result = [];
+    counts.forEach((sid, count) {
+      result.add({'service_id': sid, 'name': idToName[sid] ?? 'Unbekannt', 'count': count});
+    });
+    result.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
+    if (result.length > limit) {
+      return result.sublist(0, limit);
+    }
+    return result;
+  }
+
+  /// Calculates the no‑show rate for bookings in the given period.
+  /// The returned map contains `total` (total bookings), `noShows`
+  /// (count with status 'no_show') and `rate` (noShows/total).  If
+  /// there are no bookings, the rate is null.  Throws on error.
+  static Future<Map<String, dynamic>> getNoShowRates({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final response = await _client
+        .from('bookings')
+        .select('status')
+        .gte('start_datetime', start.toIso8601String())
+        .lt('start_datetime', end.toIso8601String())
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    int total = 0;
+    int noShows = 0;
+    for (final item in data) {
+      total++;
+      final status = (item['status'] as String?)?.toLowerCase() ?? '';
+      if (status == 'no_show' || status == 'noshow' || status == 'no-show') {
+        noShows++;
+      }
+    }
+    double? rate;
+    if (total > 0) {
+      rate = noShows / total;
+    }
+    return {'total': total, 'noShows': noShows, 'rate': rate};
+  }
+
+  /// Aggregates simple loyalty statistics.  Returns a map with
+  /// `totalCustomers`, `averagePoints`, `totalRedemptions` and
+  /// `redemptionRate` (redemptions per customer) for the entire
+  /// database.  Throws on error.
+  static Future<Map<String, dynamic>> getLoyaltyStats() async {
+    final pointsResponse = await _client.from('customer_loyalty_points').select('points').execute();
+    if (pointsResponse.error != null) {
+      throw pointsResponse.error!;
+    }
+    final pointsData = pointsResponse.data as List<dynamic>;
+    int totalCustomers = pointsData.length;
+    num totalPoints = 0;
+    for (final item in pointsData) {
+      totalPoints += (item['points'] as int?) ?? 0;
+    }
+    final averagePoints = totalCustomers > 0 ? totalPoints / totalCustomers : 0;
+    final redemptionsResponse = await _client.from('loyalty_redemptions').select('id').execute();
+    if (redemptionsResponse.error != null) {
+      throw redemptionsResponse.error!;
+    }
+    final redemptionsData = redemptionsResponse.data as List<dynamic>;
+    final totalRedemptions = redemptionsData.length;
+    final redemptionRate = totalCustomers > 0 ? totalRedemptions / totalCustomers : 0;
+    return {
+      'totalCustomers': totalCustomers,
+      'averagePoints': averagePoints,
+      'totalRedemptions': totalRedemptions,
+      'redemptionRate': redemptionRate,
+    };
+  }
+
+  /// Computes simple inventory KPIs.  Returns a map with
+  /// `totalProducts`, `lowStockCount` (quantity <= 5) and
+  /// `totalValue` (sum of price * quantity).  Throws on error.
+  static Future<Map<String, dynamic>> getInventoryKPI() async {
+    final response = await _client
+        .from('products')
+        .select('price, quantity')
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    int totalProducts = data.length;
+    int lowStockCount = 0;
+    num totalValue = 0;
+    for (final item in data) {
+      final price = (item['price'] as num?) ?? 0;
+      final qty = (item['quantity'] as int?) ?? 0;
+      totalValue += price * qty;
+      if (qty <= 5) {
+        lowStockCount++;
+      }
+    }
+    return {
+      'totalProducts': totalProducts,
+      'lowStockCount': lowStockCount,
+      'totalValue': totalValue,
+    };
+  }
+
+  /// Uploads a CSV report to Supabase storage.  The file is saved
+  /// under the `reports` bucket with a timestamped filename.  Returns
+  /// the public URL for downloading the report.  Throws on error.
+  static Future<String> uploadReportCSV(String csvContent, String fileName) async {
+    const bucket = 'reports';
+    final path = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
+    final bytes = utf8.encode(csvContent);
+    final uploadResponse =
+        await _client.storage.from(bucket).uploadBinary(path, bytes);
+    if (uploadResponse.error != null) {
+      throw uploadResponse.error!;
+    }
+    final publicUrl = _client.storage.from(bucket).getPublicUrl(path);
+    return publicUrl;
   }
 
   /// Returns the list of services available in the salon.  Fields

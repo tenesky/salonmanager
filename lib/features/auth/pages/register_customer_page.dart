@@ -46,23 +46,7 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
       // collected but not yet stored on the backend.  Role assignment
       // happens server‑side.
       await AuthService.signUpWithPassword(email: email, password: password);
-      // Attempt to send the OTP. Supabase may return a cooldown error
-      // if a code was recently sent. In that case we still navigate to
-      // the 2FA screen so the existing code can be entered.
-      try {
-        await AuthService.sendOtpForExistingUser(email);
-      } catch (error) {
-        // Inform the user of the issue but allow them to proceed.
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Code konnte nicht erneut gesendet werden: $error\nBitte prüfen Sie Ihre E‑Mail auf den bereits gesendeten Code.',
-              ),
-            ),
-          );
-        }
-      }
+      await AuthService.sendOtpForExistingUser(email);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Registrierungs‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),

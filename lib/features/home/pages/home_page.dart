@@ -108,20 +108,63 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('Home'),
         actions: [
-          // Gear icon to open account settings.  Users can log out
-          // from the settings screen.
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Einstellungen',
-            onPressed: () {
-              Navigator.of(context).pushNamed('/settings/account');
-            },
-          ),
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: 'Suche',
             onPressed: () {
               Navigator.of(context).pushNamed('/search');
+            },
+          ),
+          // Inbox/Chat icon to navigate to the unified inbox page.  This
+          // allows customers, stylists or managers to open the
+          // communication centre from the home screen.
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline),
+            tooltip: 'Nachrichten',
+            onPressed: () {
+              Navigator.of(context).pushNamed('/inbox');
+            },
+          ),
+          // Team management icon. Navigates to the team administration
+          // page where managers can manage salon members.  Only
+          // available to users with proper permissions (not enforced
+          // client-side yet).
+          IconButton(
+            icon: const Icon(Icons.group),
+            tooltip: 'Team',
+            onPressed: () {
+              Navigator.of(context).pushNamed('/staff/team');
+            },
+          ),
+
+          // Salon profile editor. Allows salon owners to edit branding,
+          // opening hours and legal information.  Displayed to
+          // all users for demonstration; in a production app you
+          // would restrict access based on role (owner/admin).
+          IconButton(
+            icon: const Icon(Icons.store),
+            tooltip: 'Salonprofil',
+            onPressed: () {
+              Navigator.of(context).pushNamed('/salon/profile');
+            },
+          ),
+          // Services catalogue editor. Lets owners or managers edit
+          // the list of offered services.  Restricted in production.
+          IconButton(
+            icon: const Icon(Icons.list_alt),
+            tooltip: 'Leistungen',
+            onPressed: () {
+              Navigator.of(context).pushNamed('/salon/services');
+            },
+          ),
+
+          // Reports dashboard icon. Opens the analytics page with KPIs
+          // for Manager und Owner.  Visible to all users for now.
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: 'Berichte',
+            onPressed: () {
+              Navigator.of(context).pushNamed('/reports');
             },
           ),
         ],

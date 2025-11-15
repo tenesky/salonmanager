@@ -57,6 +57,10 @@ import 'features/loyalty/pages/loyalty_overview_page.dart';
 // editable cells for price, duration and activation state【73678961014422†L1515-L1519】.
 import 'features/staff/pages/service_setup_page.dart';
 import 'features/staff/pages/assign_services_page.dart';
+// Import the team management page. This screen lists salon
+// members, allows role assignment and activation toggling, and can
+// invite new members via email.
+import 'features/staff/pages/team_page.dart';
 import 'features/customer/pages/customer_list_page.dart';
 import 'features/customer/pages/customer_profile_page.dart';
 import 'features/settings/pages/impressum_page.dart';
@@ -66,6 +70,19 @@ import 'features/search/pages/global_search_page.dart';
 // Gallery pages
 import 'features/gallery/pages/gallery_page.dart';
 import 'features/gallery/pages/gallery_detail_page.dart';
+// Import pages for salon profile editor and service catalogue editor.  These
+// pages allow salon owners to manage their branding and offerings.  They
+// are conditionally shown to authorised users (e.g. salon owners) via
+// navigation.
+import 'features/salon/pages/salon_profile_page.dart';
+import 'features/salon/pages/services_editor_page.dart';
+// Import reports page for analytics.  This dashboard displays
+// revenue, utilisation, top services and other KPIs.
+import 'features/reports/pages/reports_page.dart';
+// Import the inbox page for the messaging centre. This page displays
+// system, customer and team messages in separate tabs and allows
+// sending team messages.
+import 'features/inbox/pages/inbox_page.dart';
 // Import day calendar page for daily schedule. This page displays a timeline
 // with columns per stylist and supports drag‑and‑drop to move bookings,
 // matching Screen 36 of the calendar module【73678961014422†L1528-L1532】.
@@ -91,11 +108,14 @@ import 'features/booking/pages/booking_professional_detail_page.dart';
 import 'features/settings/pages/notification_settings_page.dart';
 import 'features/pos/pages/pos_page.dart';
 
-// Import account settings page for logging out and viewing account info.
-import 'features/settings/pages/account_settings_page.dart';
-
 // Import theme
 import 'core/theme.dart';
+// Import connectivity provider and system pages for offline, maintenance and error handling.
+import 'core/connectivity_provider.dart';
+import 'features/system/pages/offline_page.dart';
+import 'features/system/pages/maintenance_page.dart';
+import 'features/system/pages/not_found_page.dart';
+import 'features/system/pages/forbidden_page.dart';
 
 /// The root widget of the application. This sets up a basic
 /// [MaterialApp] with placeholder theming and a placeholder home
@@ -106,16 +126,22 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'SalonManager',
-      // Use the predefined light and dark themes from core/theme.dart. These define
-      // primary and secondary colors (black and gold) and ensure consistent
-      // styling across the app.
-      theme: lightTheme,
-      darkTheme: darkTheme,
-      // Define the initial route and route table.
-      initialRoute: '/',
-      routes: {
+    // Wrap the app in a ValueListenableBuilder to react to offline status.
+    return ValueListenableBuilder<bool>(
+      valueListenable: ConnectivityProvider.instance.isOffline,
+      builder: (context, offline, child) {
+        return Stack(
+          children: [
+            MaterialApp(
+              title: 'SalonManager',
+              // Use the predefined light and dark themes from core/theme.dart. These define
+              // primary and secondary colors (black and gold) and ensure consistent
+              // styling across the app.
+              theme: lightTheme,
+              darkTheme: darkTheme,
+              // Define the initial route and route table.
+              initialRoute: '/',
+              routes: {
         '/': (context) => const WelcomePage(),
         '/login': (context) => const LoginPage(),
         '/two-factor': (context) => const TwoFactorPage(),
@@ -154,6 +180,7 @@ class MyApp extends StatelessWidget {
         '/inventory/products': (context) => const ProductListPage(),
         // Global search page showing results in tabs for salons, services and stylists.
         '/search': (context) => const GlobalSearchPage(),
+        '/inbox': (context) => const InboxPage(),
         '/onboarding-customer': (context) => const OnboardingCustomerPage(),
         '/onboarding-salon': (context) => const OnboardingSalonPage(),
         // Interactive map view. Users can explore salons on a map and
@@ -244,10 +271,6 @@ class MyApp extends StatelessWidget {
         '/loyalty': (context) => const LoyaltyOverviewPage(),
         // Legal notice page. Displays company information required by law.
         '/impressum': (context) => const ImpressumPage(),
-        // Route to the account settings page.  From here users can
-        // sign out of their account.  This implements the logout
-        // functionality requested by the user.
-        '/settings/account': (context) => const AccountSettingsPage(),
         // Route to the service setup page. This screen presents a matrix
         // view where managers can configure for each stylist which
         // services are offered, override price and duration, and activate
@@ -258,6 +281,11 @@ class MyApp extends StatelessWidget {
         // assignments. Managers can set whether a stylist is allowed to
         // perform a service. Implements Screen 43 of the schedule module.
         '/staff/assign-services': (context) => const AssignServicesPage(),
+        // Route to the team management page. Shows all members of the
+        // salon with controls to change role, toggle activation and
+        // invite new users. Implements the team administration
+        // specification in Modul M.
+        '/staff/team': (context) => const TeamPage(),
         // Route to the customers list. Displays a searchable list of
         // customers with filters and sorting. Implements Screen 44 of
         // the CRM module.
@@ -323,6 +351,40 @@ class MyApp extends StatelessWidget {
         // gallery module.
         '/gallery': (context) => const GalleryPage(),
         '/gallery/detail': (context) => const GalleryDetailPage(),
+        // Analytics dashboard. Provides an overview of revenue, utilisation,
+        // top services, no‑show rates, loyalty and inventory KPIs.
+        '/reports': (context) => const ReportsPage(),
+
+        // Routes for salon profile editing and service catalogue editing.
+        // The SalonProfilePage allows salon owners to change branding
+        // colours, upload a logo, configure opening hours and reorder
+        // page sections.  The ServicesEditorPage lets owners or
+        // managers add, edit and remove services from the salon's
+        // catalogue.  These pages implement the "Salon‑Profil‑Editor"
+        // and "Service‑Katalog" requirements from the Pflichtenheft.
+        '/salon/profile': (context) => const SalonProfilePage(),
+        '/salon/services': (context) => const ServicesEditorPage(),
+        // System pages for maintenance, forbidden and offline states.  The
+        // offline page is also shown as an overlay via the connectivity provider.
+        '/offline': (context) => const OfflinePage(),
+        '/maintenance': (context) => const MaintenancePage(),
+        '/403': (context) => const ForbiddenPage(),
+        '/404': (context) => const NotFoundPage(),
+      },
+              onUnknownRoute: (settings) {
+                // When an unknown route is requested, show the 404 page.
+                return MaterialPageRoute(builder: (context) => const NotFoundPage());
+              },
+            ),
+            // Show the offline overlay if the connectivity provider
+            // indicates the device is offline.  This overlay sits on top of
+            // the entire app and prevents interaction until the connection
+            // returns.  When the user taps "Erneut versuchen", the
+            // provider rechecks connectivity and this overlay will
+            // disappear automatically.
+            if (offline) const OfflinePage(),
+          ],
+        );
       },
     );
   }

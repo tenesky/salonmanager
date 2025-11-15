@@ -47,22 +47,8 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
     try {
       // Register the salon owner using email/password.
       await AuthService.signUpWithPassword(email: email, password: password);
-      // Attempt to send a 6‑digit code. If Supabase returns a cooldown
-      // error (e.g. a code was just sent), we still navigate to the
-      // two‑factor page so the existing code can be used.
-      try {
-        await AuthService.sendOtpForExistingUser(email);
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Code konnte nicht erneut gesendet werden: $error\nBitte prüfen Sie Ihre E‑Mail auf den bereits gesendeten Code.',
-              ),
-            ),
-          );
-        }
-      }
+      // Send a 6‑digit code to complete two‑factor sign up.
+      await AuthService.sendOtpForExistingUser(email);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Registrierungs‑Code gesendet. Bitte prüfen Sie Ihre E‑Mail.')),

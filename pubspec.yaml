@@ -1,7 +1,7 @@
 name: salonmanager
 description: SalonManager Flutter App – Grundstruktur
 # Updated version number for database integration. Increment the build number for each release.
-version: 0.2.9+2
+version: 0.3.0
 
 environment:
   sdk: ">=2.17.0 <3.0.0"
@@ -25,6 +25,12 @@ dependencies:
   intl: ^0.20.2
   geolocator: ^9.0.2
 
+  # Detects network connectivity changes.  This package allows the app
+  # to listen for offline/online status and show an offline page when
+  # the device is not connected to the internet.  It is used in the
+  # ConnectivityProvider.
+  connectivity_plus: ^4.0.1
+
   # Supabase client for Flutter. Provides authentication, realtime database
   # and Postgres access without needing a custom backend. Used for email
   # OTP login and session handling. This package replaces the previous
@@ -37,6 +43,19 @@ dependencies:
   # maps. latlong2 supplies classes for geographic coordinates.
   flutter_map: ^6.0.0
   latlong2: ^0.9.0
+
+  # Colour picker for selecting salon branding colours in the
+  # SalonProfilePage. Provides a simple hue wheel and palette
+  # selector.
+  flutter_colorpicker: ^1.0.3
+
+  # Charts for reports and analytics.  The fl_chart package provides
+  # line, bar and pie charts used in the ReportsPage dashboards.
+  fl_chart: ^0.60.0
+
+  # CSV converter for exporting report data.  This dependency
+  # simplifies generating CSV strings from lists of maps.
+  csv: ^5.0.0
 
 dev_dependencies:
   flutter_test:
