@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+// We import DbService from the services folder to create and update
+// salon records. The relative path requires three segments up because
+// this file resides in lib/features/onboarding/pages.
+import '../../../services/db_service.dart';
 
 import '../../../common/themed_background.dart';
 
@@ -137,7 +142,84 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
   /// Completes the onboarding by saving preferences and navigating
   /// to the home page.
   Future<void> _finishOnboarding() async {
+    // Save the collected preferences locally
     await _savePreferences();
+    // Also create the salon in the database so it appears in lists and on the map.
+    try {
+      // Obtain the current user id from Supabase Auth. If the user is not
+      // authenticated for some reason, ownerId will be null and the
+      // following call may throw. In that case we silently ignore the
+      // database insertion.
+      final ownerId = Supabase.instance.client.auth.currentUser?.id;
+      if (ownerId != null && _salonNameController.text.trim().isNotEmpty) {
+        // Build a combined address string from the provided fields. If any
+        // components are empty they are omitted.
+        final parts = <String>[];
+        if (_streetController.text.trim().isNotEmpty) {
+          final street = _streetController.text.trim();
+          if (_houseNumberController.text.trim().isNotEmpty) {
+            parts.add('$street ${_houseNumberController.text.trim()}');
+          } else {
+            parts.add(street);
+          }
+        }
+        if (_postalCodeController.text.trim().isNotEmpty ||
+            _cityController.text.trim().isNotEmpty) {
+          final postal = _postalCodeController.text.trim();
+          final city = _cityController.text.trim();
+          if (postal.isNotEmpty && city.isNotEmpty) {
+            parts.add('$postal $city');
+          } else {
+            parts.add(postal + city);
+          }
+        }
+        if (_countryController.text.trim().isNotEmpty) {
+          parts.add(_countryController.text.trim());
+        }
+        final combinedAddress = parts.join(', ');
+        // Insert the salon and get its id
+        final salonId = await DbService.addSalon(
+          ownerId: ownerId,
+          name: _salonNameController.text.trim(),
+          address: combinedAddress.isNotEmpty ? combinedAddress : null,
+        );
+        // Prepare phone number: use the first provided phone entry if any
+        String? phone;
+        if (_phone1Controller.text.trim().isNotEmpty) {
+          phone = _phone1Controller.text.trim();
+        } else if (_phone2Controller.text.trim().isNotEmpty) {
+          phone = _phone2Controller.text.trim();
+        }
+        // Build opening hours string. Format each line as "Tag: start‑end" or
+        // "Tag: geschlossen" for closed days. Combine with newlines.
+        final openingLines = <String>[];
+        for (int i = 0; i < _days.length; i++) {
+          final day = _days[i];
+          if (_openingIsClosed[i]) {
+            openingLines.add('$day: geschlossen');
+          } else {
+            final start = _openingStartControllers[i].text.trim();
+            final end = _openingEndControllers[i].text.trim();
+            if (start.isNotEmpty && end.isNotEmpty) {
+              openingLines.add('$day: $start-$end');
+            } else {
+              // If times are missing, mark as geschlossen
+              openingLines.add('$day: geschlossen');
+            }
+          }
+        }
+        final openingHours = openingLines.join('\n');
+        // Update additional salon details
+        await DbService.updateSalonProfile(
+          salonId: salonId,
+          phone: phone,
+          openingHours: openingHours,
+        );
+      }
+    } catch (_) {
+      // Ignore errors during salon creation; the onboarding will still
+      // complete and the user can add the salon later via profile settings.
+    }
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed('/home');
   }

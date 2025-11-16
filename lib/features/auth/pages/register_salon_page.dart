@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../services/auth_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../services/db_service.dart';
 
 /// Registration screen for new salon owners.
@@ -105,6 +106,13 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
       // Pass the user role so the two‑factor page knows which onboarding
       // flow to show after verification. For salon owners we set
       // `role: 'salon'`.
+      // Persist the owner's first name locally so we can greet them on
+      // the home screen. Storing this in SharedPreferences allows
+      // retrieval after onboarding. Errors are ignored.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('profile.firstName', _firstNameController.text.trim());
+      } catch (_) {}
       Navigator.of(context).pushNamed('/two-factor', arguments: {
         'email': email,
         'role': 'salon',

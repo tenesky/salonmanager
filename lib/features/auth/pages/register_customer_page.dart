@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import '../../../common/themed_background.dart';
 import '../../../services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Registration screen for new customers.
 ///
@@ -70,6 +71,13 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
       // flow to show after verification. Customers use the shorter
       // onboarding, salon owners use the extended version. Here we
       // explicitly set the role to `customer`.
+      // Persist the first name locally so we can greet the user on the
+      // home screen. Storing this in SharedPreferences allows
+      // retrieval after onboarding. We ignore any errors here.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('profile.firstName', _firstNameController.text.trim());
+      } catch (_) {}
       Navigator.of(context).pushNamed('/two-factor', arguments: {
         'email': email,
         'role': 'customer',
@@ -96,6 +104,12 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
       // Remove the default app bar for a clean, full‑screen sign up page.
       body: ThemedBackground(
         child: Container(
+          // Ensure the colour overlay covers the entire screen so the patterned
+          // background remains visible even below the scrollable content. Without
+          // specifying width/height, the container may shrink to its child,
+          // leaving an empty area at the bottom where the pattern disappears.
+          width: double.infinity,
+          height: double.infinity,
           color: brightness == Brightness.dark ? Colors.black.withOpacity(0.6) : Colors.white.withOpacity(0.6),
           child: SafeArea(
             child: SingleChildScrollView(

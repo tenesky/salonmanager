@@ -87,11 +87,16 @@ class _LoginPageState extends State<LoginPage> {
       // Remove the default app bar for a full‑screen experience.
       body: ThemedBackground(
         child: Container(
+          // Ensure the colour overlay covers the entire screen so the patterned
+          // background remains visible even below the scrollable content. Use
+          // full width and height instead of relying on the child to size the
+          // container; this avoids leaving a plain black area at the bottom.
+          width: double.infinity,
+          height: double.infinity,
           // Overlay a translucent colour on top of the patterned background.
           // Use a slightly lower opacity to allow more of the pattern
-          // to shine through, matching the visual density of the provided
-          // mockup.  Dark mode uses black with 40% opacity; light mode
-          // uses white with 40% opacity.
+          // to shine through. Dark mode uses black with 40% opacity; light
+          // mode uses white with 40% opacity.
           color: brightness == Brightness.dark
               ? Colors.black.withOpacity(0.4)
               : Colors.white.withOpacity(0.4),
