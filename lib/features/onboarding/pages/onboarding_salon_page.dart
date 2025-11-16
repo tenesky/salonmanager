@@ -1,23 +1,20 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../common/themed_background.dart';
 
-/// Onboarding screen for salon owners.
+/// Onboarding screen for new salon owners.
 ///
-/// This page allows a new salon owner to customise their branding and
-/// salon details.  The owner can upload a logo, choose primary and
-/// accent colours, specify the salon name and opening hours and decide
-/// whether to use default legal texts or provide their own.  The
-/// order of layout blocks can be adjusted and a live preview shows the
-/// current selections.  When the user completes the onboarding, the
-/// preferences are stored locally using [SharedPreferences] and the
-/// app navigates to the home page. In a full implementation, these
-/// values would also be persisted to Supabase.
+/// This page guides salon owners through a multi‑step process to
+/// capture essential business details: the salon name, address,
+/// contact information and opening hours. Each section expands
+/// sequentially—once a section is completed it is marked with a
+/// check icon and the next section automatically becomes active.
+/// A progress bar at the top visualises completion. When all
+/// sections are finished the "Finish" button becomes enabled and
+/// the collected data is saved locally before navigating to the
+/// home page. Data persistence uses SharedPreferences; in a real
+/// implementation these values would also be sent to a backend.
 class OnboardingSalonPage extends StatefulWidget {
   const OnboardingSalonPage({Key? key}) : super(key: key);
 
@@ -26,408 +23,813 @@ class OnboardingSalonPage extends StatefulWidget {
 }
 
 class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
-  Uint8List? _logoBytes;
-  final ImagePicker _picker = ImagePicker();
-
-  // Colour options for primary and accent colours.  The first entry is
-  // the default (Schwarz for primary and Gold for accent).
-  final List<Color> _primaryOptions = [
-    const Color(0xFF000000), // Schwarz
-    const Color(0xFF212121),
-    const Color(0xFF424242),
-  ];
-  final List<String> _primaryNames = [
-    'Schwarz',
-    'Dunkelgrau',
-    'Mittelgrau',
-  ];
-  final List<Color> _accentOptions = [
-    const Color(0xFFFFD700), // Gold
-    const Color(0xFFCD7F32), // Bronze
-    const Color(0xFFC0C0C0), // Silber
-    Colors.deepOrange,
-  ];
-  final List<String> _accentNames = [
-    'Gold',
-    'Bronze',
-    'Silber',
-    'Orange',
-  ];
-
-  Color _primaryColor = const Color(0xFF000000);
-  Color _accentColor = const Color(0xFFFFD700);
-
-  final List<String> _blockOptions = const ['Hero', 'Services', 'Team', 'Gallery'];
-  late List<String> _blockOrder;
-
-  // Controllers for additional salon details.
+  // Controllers for the main salon fields.
   final TextEditingController _salonNameController = TextEditingController();
-  final TextEditingController _openingHoursController = TextEditingController();
-  final TextEditingController _legalTextController = TextEditingController();
-  bool _useDefaultLegalText = true;
+  final TextEditingController _streetController = TextEditingController();
+  final TextEditingController _houseNumberController = TextEditingController();
+  final TextEditingController _postalCodeController = TextEditingController();
+  final TextEditingController _cityController = TextEditingController();
+  final TextEditingController _countryController = TextEditingController();
+  final TextEditingController _email1Controller = TextEditingController();
+  final TextEditingController _email2Controller = TextEditingController();
+  final TextEditingController _phone1Controller = TextEditingController();
+  final TextEditingController _phone2Controller = TextEditingController();
+
+  // Opening hours configuration: list of day names and corresponding
+  // controllers for start and end times. A boolean indicates if the
+  // salon is closed on that day. The last entry represents
+  // holidays (Feiertage).
+  final List<String> _days = const [
+    'Montag',
+    'Dienstag',
+    'Mittwoch',
+    'Donnerstag',
+    'Freitag',
+    'Samstag',
+    'Sonntag',
+    'Feiertage',
+  ];
+  late final List<bool> _openingIsClosed;
+  late final List<TextEditingController> _openingStartControllers;
+  late final List<TextEditingController> _openingEndControllers;
+  // Keys for storing opening hours in SharedPreferences. Use simple
+  // lowercase abbreviations to avoid special characters.
+  final List<String> _dayKeys = const [
+    'mo', 'di', 'mi', 'do', 'fr', 'sa', 'so', 'holidays'
+  ];
+
+  // State flags indicating whether a section has been completed.
+  bool _isSalonNameDone = false;
+  bool _isAddressDone = false;
+  bool _isContactDone = false;
+  bool _isOpeningDone = false;
+
+  // Helper to compute the current step based on completed flags. The
+  // first incomplete section becomes active.
+  int get _currentStep {
+    if (!_isSalonNameDone) return 0;
+    if (!_isAddressDone) return 1;
+    if (!_isContactDone) return 2;
+    if (!_isOpeningDone) return 3;
+    return 4;
+  }
 
   @override
   void initState() {
     super.initState();
-    _blockOrder = List<String>.from(_blockOptions);
+    _openingIsClosed = List<bool>.filled(_days.length, false);
+    _openingStartControllers =
+        List<TextEditingController>.generate(_days.length, (_) => TextEditingController());
+    _openingEndControllers =
+        List<TextEditingController>.generate(_days.length, (_) => TextEditingController());
   }
 
   @override
   void dispose() {
+    // Dispose all controllers to free resources.
     _salonNameController.dispose();
-    _openingHoursController.dispose();
-    _legalTextController.dispose();
+    _streetController.dispose();
+    _houseNumberController.dispose();
+    _postalCodeController.dispose();
+    _cityController.dispose();
+    _countryController.dispose();
+    _email1Controller.dispose();
+    _email2Controller.dispose();
+    _phone1Controller.dispose();
+    _phone2Controller.dispose();
+    for (final c in _openingStartControllers) {
+      c.dispose();
+    }
+    for (final c in _openingEndControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  /// Pick an image from the device gallery for the logo. The selected
-  /// image is stored as bytes in memory and shown in the preview.
-  Future<void> _pickLogo() async {
-    final XFile? picked = await _picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      final bytes = await picked.readAsBytes();
-      setState(() {
-        _logoBytes = bytes;
-      });
-    }
-  }
-
-  /// Persist the branding and salon details to local storage.  Each
-  /// value is saved under its own key.  The colour values are saved
-  /// as hexadecimal strings.  If a logo was uploaded its bytes are
-  /// base64‑encoded.
-  Future<void> _saveBranding() async {
+  /// Persist all collected data to SharedPreferences. Keys are
+  /// namespaced under `onboardingSalon`. In a full app this data
+  /// would also be sent to a server.
+  Future<void> _savePreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('onboardingSalon.primaryColor', _primaryColor.value.toRadixString(16));
-    await prefs.setString('onboardingSalon.accentColor', _accentColor.value.toRadixString(16));
-    await prefs.setStringList('onboardingSalon.blockOrder', _blockOrder);
-    await prefs.setString('onboardingSalon.salonName', _salonNameController.text.trim());
-    await prefs.setString('onboardingSalon.openingHours', _openingHoursController.text.trim());
-    await prefs.setBool('onboardingSalon.useDefaultLegalText', _useDefaultLegalText);
-    await prefs.setString('onboardingSalon.legalText', _legalTextController.text.trim());
-    if (_logoBytes != null) {
-      final encoded = base64Encode(_logoBytes!);
-      await prefs.setString('onboardingSalon.logo', encoded);
+    await prefs.setString('onboardingSalon.name', _salonNameController.text.trim());
+    await prefs.setString('onboardingSalon.address.street', _streetController.text.trim());
+    await prefs.setString('onboardingSalon.address.number', _houseNumberController.text.trim());
+    await prefs.setString('onboardingSalon.address.postalCode', _postalCodeController.text.trim());
+    await prefs.setString('onboardingSalon.address.city', _cityController.text.trim());
+    await prefs.setString('onboardingSalon.address.country', _countryController.text.trim());
+    await prefs.setString('onboardingSalon.contact.email1', _email1Controller.text.trim());
+    await prefs.setString('onboardingSalon.contact.email2', _email2Controller.text.trim());
+    await prefs.setString('onboardingSalon.contact.phone1', _phone1Controller.text.trim());
+    await prefs.setString('onboardingSalon.contact.phone2', _phone2Controller.text.trim());
+    // Save opening hours for each day.
+    for (int i = 0; i < _days.length; i++) {
+      await prefs.setBool(
+          'onboardingSalon.openingHours.${_dayKeys[i]}.closed', _openingIsClosed[i]);
+      await prefs.setString(
+          'onboardingSalon.openingHours.${_dayKeys[i]}.start',
+          _openingStartControllers[i].text.trim());
+      await prefs.setString(
+          'onboardingSalon.openingHours.${_dayKeys[i]}.end',
+          _openingEndControllers[i].text.trim());
     }
   }
 
-  Future<void> _completeOnboarding(BuildContext context) async {
-    await _saveBranding();
+  /// Completes the onboarding by saving preferences and navigating
+  /// to the home page.
+  Future<void> _finishOnboarding() async {
+    await _savePreferences();
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed('/home');
+  }
+
+  /// Validates that the salon name has been entered. Returns true if
+  /// non‑empty.
+  bool _validateSalonName() {
+    return _salonNameController.text.trim().isNotEmpty;
+  }
+
+  /// Completes the salon name step if valid. Shows an error if the
+  /// field is empty.
+  void _completeSalonName() {
+    if (_validateSalonName()) {
+      setState(() {
+        _isSalonNameDone = true;
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte den Salon‑Namen eingeben.')),
+      );
+    }
+  }
+
+  /// Validates that all address fields (except possibly country) are
+  /// non‑empty. Returns true if valid. You may adjust the validation
+  /// rules here (e.g. make the country optional or required).
+  bool _validateAddress() {
+    return _streetController.text.trim().isNotEmpty &&
+        _houseNumberController.text.trim().isNotEmpty &&
+        _postalCodeController.text.trim().isNotEmpty &&
+        _cityController.text.trim().isNotEmpty &&
+        _countryController.text.trim().isNotEmpty;
+  }
+
+  /// Completes the address step if valid. Shows an error if any
+  /// required field is missing.
+  void _completeAddress() {
+    if (_validateAddress()) {
+      setState(() {
+        _isAddressDone = true;
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte alle Adressfelder ausfüllen.')),
+      );
+    }
+  }
+
+  /// Validates contact details. At least one email and one phone
+  /// number must be provided and valid. A simple regex is used for
+  /// email addresses; phone numbers may include digits, spaces,
+  /// dashes or a leading plus. Returns true if valid.
+  bool _validateContact() {
+    final emailRegex = RegExp(r'^([^@\s]+)@([^@\s]+)\.[^@\s]+$');
+    bool validEmail1 = _email1Controller.text.trim().isNotEmpty &&
+        emailRegex.hasMatch(_email1Controller.text.trim());
+    bool validEmail2 = _email2Controller.text.trim().isNotEmpty &&
+        emailRegex.hasMatch(_email2Controller.text.trim());
+    final phoneRegex = RegExp(r'^\+?[0-9\s\-]{5,}\$');
+    bool validPhone1 = _phone1Controller.text.trim().isNotEmpty &&
+        phoneRegex.hasMatch(_phone1Controller.text.trim());
+    bool validPhone2 = _phone2Controller.text.trim().isNotEmpty &&
+        phoneRegex.hasMatch(_phone2Controller.text.trim());
+    return (validEmail1 || validEmail2) && (validPhone1 || validPhone2);
+  }
+
+  /// Completes the contact step if valid. Shows an error if the
+  /// validation fails.
+  void _completeContact() {
+    if (_validateContact()) {
+      setState(() {
+        _isContactDone = true;
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Bitte mindestens eine gültige E‑Mail und eine Telefonnummer angeben.')),
+      );
+    }
+  }
+
+  /// Validates the opening hours. For each day (including
+  /// holidays), either the day is marked as closed or both start
+  /// and end times are provided. Returns true if all entries meet
+  /// these conditions.
+  bool _validateOpeningHours() {
+    for (int i = 0; i < _days.length; i++) {
+      if (!_openingIsClosed[i]) {
+        if (_openingStartControllers[i].text.trim().isEmpty ||
+            _openingEndControllers[i].text.trim().isEmpty) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /// Completes the opening hours step if valid. Shows an error if
+  /// any day lacks the required information.
+  void _completeOpening() {
+    if (_validateOpeningHours()) {
+      setState(() {
+        _isOpeningDone = true;
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Bitte für jeden Tag Öffnungszeiten angeben oder als geschlossen markieren.')),
+      );
+    }
+  }
+
+  /// Build the salon name field. Shows the selected value and a check
+  /// when completed; otherwise presents a text field and save button.
+  Widget _buildSalonNameField(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    final bool isDone = _isSalonNameDone;
+    final bool isActive = (_currentStep == 0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: brightness == Brightness.dark
+                ? Colors.white.withOpacity(0.1)
+                : Colors.black.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12.0),
+            border: Border.all(
+              color: isActive
+                  ? accent
+                  : (brightness == Brightness.dark
+                      ? Colors.white54
+                      : Colors.black45),
+              width: isActive ? 2 : 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  isDone
+                      ? 'Salonname: ${_salonNameController.text.trim()}'
+                      : 'Salonname',
+                  style: TextStyle(
+                    color: brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (isDone)
+                Icon(Icons.check_circle, color: accent)
+              else if (isActive)
+                Icon(Icons.expand_more,
+                    color: brightness == Brightness.dark
+                        ? Colors.white70
+                        : Colors.black54)
+              else
+                const SizedBox.shrink(),
+            ],
+          ),
+        ),
+        if (isActive && !isDone)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _salonNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Salonname',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton(
+                    onPressed: _salonNameController.text.trim().isNotEmpty
+                        ? _completeSalonName
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: Colors.black,
+                    ),
+                    child: const Text('Speichern und weiter'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Build the address field. Shows the entered address when completed.
+  Widget _buildAddressField(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    final bool isDone = _isAddressDone;
+    final bool isActive = (_currentStep == 1);
+    // Concatenate address for display when done.
+    final String addressDisplay =
+        '${_streetController.text.trim()} ${_houseNumberController.text.trim()}, ${_postalCodeController.text.trim()} ${_cityController.text.trim()}, ${_countryController.text.trim()}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: brightness == Brightness.dark
+                ? Colors.white.withOpacity(0.1)
+                : Colors.black.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12.0),
+            border: Border.all(
+              color: isActive
+                  ? accent
+                  : (brightness == Brightness.dark
+                      ? Colors.white54
+                      : Colors.black45),
+              width: isActive ? 2 : 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  isDone ? 'Adresse: $addressDisplay' : 'Adresse',
+                  style: TextStyle(
+                    color: brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (isDone)
+                Icon(Icons.check_circle, color: accent)
+              else if (isActive)
+                Icon(Icons.expand_more,
+                    color: brightness == Brightness.dark
+                        ? Colors.white70
+                        : Colors.black54)
+              else
+                const SizedBox.shrink(),
+            ],
+          ),
+        ),
+        if (isActive && !isDone)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _streetController,
+                  decoration: const InputDecoration(
+                    labelText: 'Straße',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _houseNumberController,
+                  decoration: const InputDecoration(
+                    labelText: 'Hausnummer',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _postalCodeController,
+                  decoration: const InputDecoration(
+                    labelText: 'PLZ',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _cityController,
+                  decoration: const InputDecoration(
+                    labelText: 'Ort',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _countryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Land',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton(
+                    onPressed: _validateAddress() ? _completeAddress : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: Colors.black,
+                    ),
+                    child: const Text('Speichern und weiter'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Build the contact field. Shows selected emails and phones when
+  /// completed; otherwise displays input fields.
+  Widget _buildContactField(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    final bool isDone = _isContactDone;
+    final bool isActive = (_currentStep == 2);
+    String contactDisplay = '';
+    if (_isContactDone) {
+      List<String> emails = [];
+      if (_email1Controller.text.trim().isNotEmpty) emails.add(_email1Controller.text.trim());
+      if (_email2Controller.text.trim().isNotEmpty) emails.add(_email2Controller.text.trim());
+      List<String> phones = [];
+      if (_phone1Controller.text.trim().isNotEmpty) phones.add(_phone1Controller.text.trim());
+      if (_phone2Controller.text.trim().isNotEmpty) phones.add(_phone2Controller.text.trim());
+      contactDisplay = 'E-Mail: ${emails.join(', ')} / Tel: ${phones.join(', ')}';
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: brightness == Brightness.dark
+                ? Colors.white.withOpacity(0.1)
+                : Colors.black.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12.0),
+            border: Border.all(
+              color: isActive
+                  ? accent
+                  : (brightness == Brightness.dark
+                      ? Colors.white54
+                      : Colors.black45),
+              width: isActive ? 2 : 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  isDone ? 'Kontaktdaten: $contactDisplay' : 'Kontaktdaten',
+                  style: TextStyle(
+                    color: brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (isDone)
+                Icon(Icons.check_circle, color: accent)
+              else if (isActive)
+                Icon(Icons.expand_more,
+                    color: brightness == Brightness.dark
+                        ? Colors.white70
+                        : Colors.black54)
+              else
+                const SizedBox.shrink(),
+            ],
+          ),
+        ),
+        if (isActive && !isDone)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _email1Controller,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'E-Mail Adresse 1',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _email2Controller,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'E-Mail Adresse 2 (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _phone1Controller,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Telefonnummer 1',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _phone2Controller,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Telefonnummer 2 (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton(
+                    onPressed: _validateContact() ? _completeContact : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: Colors.black,
+                    ),
+                    child: const Text('Speichern und weiter'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Build the opening hours field. Lists each day with a toggle and
+  /// time inputs. Holidays are included as the last entry.
+  Widget _buildOpeningField(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    final bool isDone = _isOpeningDone;
+    final bool isActive = (_currentStep == 3);
+    // Display summary of opening hours when done. We summarise
+    // closed days and show first day times as an example. You could
+    // expand this to a more detailed summary if desired.
+    String openingDisplay = '';
+    if (isDone) {
+      List<String> parts = [];
+      for (int i = 0; i < _days.length; i++) {
+        if (_openingIsClosed[i]) {
+          parts.add('${_days[i]}: geschlossen');
+        } else {
+          final start = _openingStartControllers[i].text.trim();
+          final end = _openingEndControllers[i].text.trim();
+          parts.add('${_days[i]}: $start–$end');
+        }
+      }
+      openingDisplay = parts.join(' | ');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: brightness == Brightness.dark
+                ? Colors.white.withOpacity(0.1)
+                : Colors.black.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12.0),
+            border: Border.all(
+              color: isActive
+                  ? accent
+                  : (brightness == Brightness.dark
+                      ? Colors.white54
+                      : Colors.black45),
+              width: isActive ? 2 : 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  isDone ? 'Öffnungszeiten: $openingDisplay' : 'Öffnungszeiten',
+                  style: TextStyle(
+                    color: brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (isDone)
+                Icon(Icons.check_circle, color: accent)
+              else if (isActive)
+                Icon(Icons.expand_more,
+                    color: brightness == Brightness.dark
+                        ? Colors.white70
+                        : Colors.black54)
+              else
+                const SizedBox.shrink(),
+            ],
+          ),
+        ),
+        if (isActive && !isDone)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Generate fields for each day. Each day shows a
+                // label, a toggle for closed, and optional start/end
+                // time fields. Spacing is handled between entries.
+                for (int i = 0; i < _days.length; i++) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _days[i],
+                        style: TextStyle(
+                          color: brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black,
+                        ),
+                      ),
+                      Switch(
+                        value: !_openingIsClosed[i],
+                        activeColor: accent,
+                        onChanged: (bool val) {
+                          setState(() {
+                            _openingIsClosed[i] = !val;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  if (!_openingIsClosed[i])
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _openingStartControllers[i],
+                            keyboardType: TextInputType.datetime,
+                            decoration: const InputDecoration(
+                              labelText: 'Von (HH:MM)',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _openingEndControllers[i],
+                            keyboardType: TextInputType.datetime,
+                            decoration: const InputDecoration(
+                              labelText: 'Bis (HH:MM)',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 16),
+                ],
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton(
+                    onPressed: _validateOpeningHours() ? _completeOpening : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: Colors.black,
+                    ),
+                    child: const Text('Speichern und weiter'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    // Compute progress: each completed section contributes 0.25.
+    double progress = 0.0;
+    if (_isSalonNameDone) progress += 0.25;
+    if (_isAddressDone) progress += 0.25;
+    if (_isContactDone) progress += 0.25;
+    if (_isOpeningDone) progress += 0.25;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Salon‑Branding einrichten'),
-        automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back,
+              color: brightness == Brightness.dark ? Colors.white : Colors.black),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: ThemedBackground(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Gestalte deinen Salon',
-                style: theme.textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Lade dein Logo hoch, wähle Farben und ordne die Elemente deiner Salon‑Seite. Du kannst auch den Namen, Öffnungszeiten und Rechtstexte anpassen. Eine Vorschau zeigt dir sofort das Ergebnis.',
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 24),
-              // Logo section
-              Text('Logo', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+        child: Container(
+          color: brightness == Brightness.dark
+              ? Colors.black.withOpacity(0.4)
+              : Colors.white.withOpacity(0.4),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Logo preview
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceVariant,
-                      borderRadius: BorderRadius.circular(8.0),
-                      image: _logoBytes != null
-                          ? DecorationImage(
-                              image: MemoryImage(_logoBytes!),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
+                  // Progress bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4.0),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 6.0,
+                      backgroundColor: brightness == Brightness.dark
+                          ? Colors.white.withOpacity(0.2)
+                          : Colors.black.withOpacity(0.1),
+                      valueColor: AlwaysStoppedAnimation<Color>(accent),
                     ),
-                    child: _logoBytes == null
-                        ? Icon(Icons.image, color: theme.colorScheme.onSurfaceVariant)
-                        : null,
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _pickLogo,
-                      icon: const Icon(Icons.upload),
-                      label: const Text('Logo hochladen'),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Personalise your Salon',
+                    style: TextStyle(
+                      color: brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Gib deine Salon‑Details ein.',
+                    style: TextStyle(
+                      color: brightness == Brightness.dark
+                          ? Colors.white70
+                          : Colors.black54,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSalonNameField(context),
+                  const SizedBox(height: 16),
+                  _buildAddressField(context),
+                  const SizedBox(height: 16),
+                  _buildContactField(context),
+                  const SizedBox(height: 16),
+                  _buildOpeningField(context),
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isOpeningDone ? _finishOnboarding : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accent,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      child: const Text('Finish'),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
-              // Primary colour selection
-              Text('Primärfarbe', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8.0,
-                children: List<Widget>.generate(_primaryOptions.length, (index) {
-                  final color = _primaryOptions[index];
-                  final name = _primaryNames[index];
-                  final selected = _primaryColor == color;
-                  return ChoiceChip(
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: theme.dividerColor),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(name),
-                      ],
-                    ),
-                    selected: selected,
-                    onSelected: (val) {
-                      if (val) {
-                        setState(() {
-                          _primaryColor = color;
-                        });
-                      }
-                    },
-                  );
-                }),
-              ),
-              const SizedBox(height: 16),
-              // Accent colour selection
-              Text('Akzentfarbe', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8.0,
-                children: List<Widget>.generate(_accentOptions.length, (index) {
-                  final color = _accentOptions[index];
-                  final name = _accentNames[index];
-                  final selected = _accentColor == color;
-                  return ChoiceChip(
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: theme.dividerColor),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(name),
-                      ],
-                    ),
-                    selected: selected,
-                    onSelected: (val) {
-                      if (val) {
-                        setState(() {
-                          _accentColor = color;
-                        });
-                      }
-                    },
-                  );
-                }),
-              ),
-              const SizedBox(height: 24),
-              // Salon details section
-              Text('Salon‑Details', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _salonNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Salon‑Name',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _openingHoursController,
-                decoration: const InputDecoration(
-                  labelText: 'Öffnungszeiten',
-                  hintText: 'z.B. Mo–Sa 09:00–18:00',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SwitchListTile(
-                title: const Text('Standard‑Rechtstexte verwenden'),
-                subtitle: const Text('Wenn deaktiviert, kannst du eigene Texte eingeben.'),
-                value: _useDefaultLegalText,
-                onChanged: (val) {
-                  setState(() {
-                    _useDefaultLegalText = val;
-                    if (val) {
-                      _legalTextController.clear();
-                    }
-                  });
-                },
-              ),
-              if (!_useDefaultLegalText)
-                TextField(
-                  controller: _legalTextController,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'Eigene Rechtstexte',
-                    hintText: 'Impressum, AGB, Datenschutz …',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              if (!_useDefaultLegalText) const SizedBox(height: 24),
-              // Layout order section
-              Text('Layout‑Blöcke (Reihenfolge ändern)', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceVariant,
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-                child: ReorderableListView(
-                  onReorder: (oldIndex, newIndex) {
-                    setState(() {
-                      if (newIndex > oldIndex) newIndex -= 1;
-                      final item = _blockOrder.removeAt(oldIndex);
-                      _blockOrder.insert(newIndex, item);
-                    });
-                  },
-                  children: [
-                    for (final block in _blockOrder)
-                      ListTile(
-                        key: ValueKey(block),
-                        title: Text(block),
-                        leading: const Icon(Icons.drag_handle),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              // Live preview section
-              Text('Live‑Vorschau', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(8.0),
-                decoration: BoxDecoration(
-                  color: _primaryColor,
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_logoBytes != null)
-                      Container(
-                        height: 60,
-                        alignment: Alignment.centerLeft,
-                        child: Image.memory(_logoBytes!, height: 50),
-                      ),
-                    if (_salonNameController.text.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Text(
-                          _salonNameController.text,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: _primaryColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
-                          ),
-                        ),
-                      ),
-                    if (_openingHoursController.text.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2.0),
-                        child: Text(
-                          _openingHoursController.text,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: _primaryColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 4),
-                    for (final block in _blockOrder)
-                      Container(
-                        margin: const EdgeInsets.symmetric(vertical: 4.0),
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: _accentColor.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(4.0),
-                        ),
-                        alignment: Alignment.centerLeft,
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Text(
-                          block,
-                          style: TextStyle(
-                            color: _primaryColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 4),
-                    if (!_useDefaultLegalText && _legalTextController.text.trim().isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Text(
-                          _legalTextController.text.trim().length > 60
-                              ? _legalTextController.text.trim().substring(0, 60) + '…'
-                              : _legalTextController.text.trim(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                            color: _primaryColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
-                          ),
-                        ),
-                      )
-                    else if (_useDefaultLegalText)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Text(
-                          'Standard‑Rechtstexte werden verwendet',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                            color: _primaryColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              // Continue button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _completeOnboarding(context),
-                  child: const Text('Weiter'),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () => Navigator.of(context).pushReplacementNamed('/home'),
-                child: const Text('Überspringen'),
-              ),
-            ],
+            ),
           ),
         ),
       ),

@@ -102,7 +102,13 @@ class _RegisterSalonPageState extends State<RegisterSalonPage> {
           const SnackBar(content: Text('Registrierung erfolgreich. Code konnte nicht gesendet werden.')),
         );
       }
-      Navigator.of(context).pushNamed('/two-factor', arguments: {'email': email});
+      // Pass the user role so the two‑factor page knows which onboarding
+      // flow to show after verification. For salon owners we set
+      // `role: 'salon'`.
+      Navigator.of(context).pushNamed('/two-factor', arguments: {
+        'email': email,
+        'role': 'salon',
+      });
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

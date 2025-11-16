@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../../common/themed_background.dart';
 
 /// Onboarding screen for new customers.
 ///
-/// This page allows a user to customise basic preferences such as hair
-/// length, style and colour, and to provide contact details.  The
-/// selections are stored locally via SharedPreferences and can be used
-/// later for personalisation.  A "Weiter" button completes the
-/// onboarding and navigates to the home page.
+/// After completing two‑factor authentication a normal user is guided
+/// through a short personalisation flow. The user selects their
+/// gender, preferred language, hair colour, hair length and hair
+/// structure. Each selection is presented one at a time; after the
+/// user makes a choice it is ticked off and the next question
+/// automatically expands. Once all selections have been made the
+/// "Finish" button becomes active and the preferences are stored
+/// locally before navigating to the home page. The look and feel
+/// follow the provided mockups: a dark patterned background with a
+/// semi‑transparent overlay, rounded cards for each field and a
+/// yellow progress bar at the top.
 class OnboardingCustomerPage extends StatefulWidget {
   const OnboardingCustomerPage({Key? key}) : super(key: key);
 
@@ -17,184 +24,387 @@ class OnboardingCustomerPage extends StatefulWidget {
 }
 
 class _OnboardingCustomerPageState extends State<OnboardingCustomerPage> {
-  final List<String> _hairLengthOptions =
-      const ['Kurz (<10cm)', 'Mittel (10–20cm)', 'Lang (>20cm)'];
-  final List<String> _styleOptions = const ['Klassisch', 'Modern', 'Trend'];
-  final List<String> _colorOptions = const ['Blond', 'Braun', 'Schwarz', 'Rot'];
+  // Define selectable options for each field.
+  final List<String> _genderOptions = const [
+    'Männlich',
+    'Weiblich',
+    'Divers',
+    'Keine Angabe',
+  ];
+  // A curated list of languages. In a full implementation this could
+  // include all ISO languages. These serve as examples and can be
+  // extended as needed.
+  final List<String> _languageOptions = const [
+    'Deutsch',
+    'Englisch',
+    'Französisch',
+    'Spanisch',
+    'Italienisch',
+    'Türkisch',
+    'Arabisch',
+    'Russisch',
+    'Chinesisch',
+    'Japanisch',
+  ];
+  final List<String> _hairColorOptions = const [
+    'Blond',
+    'Braun',
+    'Schwarz',
+    'Rot',
+    'Grau',
+    'Weiß',
+    'Bunt',
+  ];
+  final List<String> _hairLengthOptions = const [
+    'Kurz (<10cm)',
+    'Mittel (10–20cm)',
+    'Lang (>20cm)',
+  ];
+  final List<String> _hairStructureOptions = const [
+    'Glatt',
+    'Wellig',
+    'Lockig',
+    'Kraus',
+  ];
 
+  // Variables to hold the user’s selections.
+  String? _selectedGender;
+  String? _selectedLanguage;
+  String? _selectedHairColor;
   String? _selectedHairLength;
-  String? _selectedStyle;
-  String? _selectedColor;
-  bool _pushOptIn = false;
+  String? _selectedHairStructure;
 
-  // Contact information controllers.  The phone number helps with
-  // appointment reminders; the address is optional and can be used
-  // later for location‑based suggestions.
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _addressController = TextEditingController();
+  // Index of the currently expanded field (0–4). When a selection is
+  // made, this index increments to show the next field. Once all
+  // fields are completed it stays at 4. A value of -1 indicates
+  // nothing is expanded (e.g. after selecting the last option).
+  int _currentStep = 0;
 
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    _addressController.dispose();
-    super.dispose();
-  }
+  // Role indicates whether this onboarding is for a customer or
+  // salon owner. Salon owners will proceed to another onboarding
+  // screen after completing these personal questions. The default
+  // role is `customer`. It is updated in didChangeDependencies
+  // based on the route arguments.
+  String _role = 'customer';
 
-  /// Persist the selections and contact information to local storage.
+  /// Save the selected preferences to local storage. These values are
+  /// stored under keys beginning with `onboarding.` so they can be
+  /// retrieved later (e.g. in the profile page). In a full app this
+  /// method might call a backend API to persist the data.
   Future<void> _savePreferences() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('onboarding.gender', _selectedGender ?? '');
+    await prefs.setString('onboarding.language', _selectedLanguage ?? '');
+    await prefs.setString('onboarding.hairColor', _selectedHairColor ?? '');
     await prefs.setString('onboarding.hairLength', _selectedHairLength ?? '');
-    await prefs.setString('onboarding.style', _selectedStyle ?? '');
-    await prefs.setString('onboarding.color', _selectedColor ?? '');
-    await prefs.setBool('onboarding.pushOptIn', _pushOptIn);
-    await prefs.setString('onboarding.phone', _phoneController.text.trim());
-    await prefs.setString('onboarding.address', _addressController.text.trim());
+    await prefs.setString('onboarding.hairStructure', _selectedHairStructure ?? '');
   }
 
-  /// Save preferences and navigate to the home page.
-  Future<void> _completeOnboarding(BuildContext context) async {
+  /// Complete the onboarding: save preferences and navigate to the
+  /// home page. The route `/home` must be registered in the app’s
+  /// route table.
+  Future<void> _finishOnboarding() async {
     await _savePreferences();
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/home');
+    // If the role is salon, proceed to the salon onboarding page; otherwise
+    // go straight to the home page. We replace the current page so
+    // the user cannot navigate back to the onboarding.
+    if (_role == 'salon') {
+      Navigator.of(context).pushReplacementNamed('/onboarding-salon');
+    } else {
+      Navigator.of(context).pushReplacementNamed('/home');
+    }
+  }
+
+  /// Determine whether all fields have been selected. When this
+  /// returns true the "Finish" button becomes enabled.
+  bool get _isComplete =>
+      _selectedGender != null &&
+      _selectedLanguage != null &&
+      _selectedHairColor != null &&
+      _selectedHairLength != null &&
+      _selectedHairStructure != null;
+
+  /// Build a card representing one selection field. Depending on
+  /// [index], this method uses the appropriate list of options and
+  /// displays either a drop‑down selection (for the active step)
+  /// or a disabled card with the selected value and a check icon.
+  Widget _buildField({required int index, required String label}) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    // Map index to the correct data.
+    List<String> options;
+    String? selected;
+    void Function(String?) onChanged;
+    switch (index) {
+      case 0:
+        options = _genderOptions;
+        selected = _selectedGender;
+        onChanged = (value) {
+          if (value == null) return;
+          setState(() {
+            _selectedGender = value;
+            _currentStep = 1;
+          });
+        };
+        break;
+      case 1:
+        options = _languageOptions;
+        selected = _selectedLanguage;
+        onChanged = (value) {
+          if (value == null) return;
+          setState(() {
+            _selectedLanguage = value;
+            _currentStep = 2;
+          });
+        };
+        break;
+      case 2:
+        options = _hairColorOptions;
+        selected = _selectedHairColor;
+        onChanged = (value) {
+          if (value == null) return;
+          setState(() {
+            _selectedHairColor = value;
+            _currentStep = 3;
+          });
+        };
+        break;
+      case 3:
+        options = _hairLengthOptions;
+        selected = _selectedHairLength;
+        onChanged = (value) {
+          if (value == null) return;
+          setState(() {
+            _selectedHairLength = value;
+            _currentStep = 4;
+          });
+        };
+        break;
+      case 4:
+        options = _hairStructureOptions;
+        selected = _selectedHairStructure;
+        onChanged = (value) {
+          if (value == null) return;
+          setState(() {
+            _selectedHairStructure = value;
+            _currentStep = 4;
+          });
+        };
+        break;
+      default:
+        options = const [];
+        selected = null;
+        onChanged = (_) {};
+    }
+    // Determine whether this field is currently active (expanded).
+    final bool isActive = _currentStep == index;
+    final bool isSelected = selected != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: brightness == Brightness.dark
+                ? Colors.white.withOpacity(0.1)
+                : Colors.black.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12.0),
+            border: Border.all(
+              color: isActive
+                  ? accent
+                  : (brightness == Brightness.dark
+                      ? Colors.white54
+                      : Colors.black45),
+              width: isActive ? 2 : 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Display the selected value or the label.
+              Text(
+                isSelected ? '$label: $selected' : label,
+                style: TextStyle(
+                  color: brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.black,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              // Show a check icon when selected.
+              if (isSelected)
+                Icon(Icons.check_circle, color: accent)
+              else
+                // Show an arrow indicator if active, else nothing.
+                (isActive
+                    ? Icon(Icons.expand_more,
+                        color: brightness == Brightness.dark
+                            ? Colors.white70
+                            : Colors.black54)
+                    : const SizedBox.shrink()),
+            ],
+          ),
+        ),
+        // If the field is active and not yet selected, show the options.
+        if (isActive && !isSelected)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: brightness == Brightness.dark
+                    ? Colors.white.withOpacity(0.05)
+                    : Colors.black.withOpacity(0.02),
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+              child: Column(
+                children: options.map((option) {
+                  final bool optionSelected = option == selected;
+                  return ListTile(
+                    title: Text(option,
+                        style: TextStyle(
+                          color: brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black,
+                        )),
+                    trailing: optionSelected
+                        ? Icon(Icons.check, color: accent)
+                        : null,
+                    onTap: () => onChanged(option),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Retrieve the role from route arguments once. If none is
+    // provided, the default of `customer` applies.
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map<String, dynamic>) {
+      final roleArg = args['role'];
+      if (roleArg is String) {
+        _role = roleArg;
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    // Progress value based on completed steps. Each selection counts as
+    // 1/5 of the bar. If all fields are done, the bar is full.
+    double progress = 0.0;
+    if (_selectedGender != null) progress += 0.2;
+    if (_selectedLanguage != null) progress += 0.2;
+    if (_selectedHairColor != null) progress += 0.2;
+    if (_selectedHairLength != null) progress += 0.2;
+    if (_selectedHairStructure != null) progress += 0.2;
+
     return Scaffold(
+      // Use a transparent app bar with a back button. The back
+      // navigation returns to the previous page (e.g. 2FA). If
+      // necessary, adjust this behaviour for other flows.
       appBar: AppBar(
-        title: const Text('Erst‑Onboarding'),
-        automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back,
+              color: brightness == Brightness.dark
+                  ? Colors.white
+                  : Colors.black),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: ThemedBackground(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Erzähl uns mehr über dich',
-                style: theme.textTheme.headlineSmall,
+        child: Container(
+          color: brightness == Brightness.dark
+              ? Colors.black.withOpacity(0.4)
+              : Colors.white.withOpacity(0.4),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 24.0, vertical: 24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Progress bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4.0),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 6.0,
+                      backgroundColor: brightness == Brightness.dark
+                          ? Colors.white.withOpacity(0.2)
+                          : Colors.black.withOpacity(0.1),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(accent),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Personalise your experience',
+                    style: TextStyle(
+                      color: brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Choose your interests.',
+                    style: TextStyle(
+                      color: brightness == Brightness.dark
+                          ? Colors.white70
+                          : Colors.black54,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Build each field. Use labels in German for the field
+                  // headers to match the provided example.
+                  _buildField(index: 0, label: 'Geschlecht'),
+                  const SizedBox(height: 16),
+                  _buildField(index: 1, label: 'Sprache'),
+                  const SizedBox(height: 16),
+                  _buildField(index: 2, label: 'Haarfarbe'),
+                  const SizedBox(height: 16),
+                  _buildField(index: 3, label: 'Haarlänge'),
+                  const SizedBox(height: 16),
+                  _buildField(index: 4, label: 'Haarstruktur'),
+                  const SizedBox(height: 32),
+                  // Finish or Next button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isComplete ? _finishOnboarding : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accent,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      // Show "Next" when role is salon; otherwise "Finish".
+                      child: Text(_role == 'salon' ? 'Next' : 'Finish'),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Wähle deine bevorzugte Haarlänge, deinen Stil und deine Lieblingsfarbe. Dies hilft uns, bessere Vorschläge zu machen.',
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 24),
-              // Hair length selection
-              Text('Haarlänge', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8.0,
-                children: _hairLengthOptions.map((option) {
-                  return ChoiceChip(
-                    label: Text(option),
-                    selected: _selectedHairLength == option,
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedHairLength = selected ? option : null;
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              // Style selection
-              Text('Stil', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8.0,
-                children: _styleOptions.map((option) {
-                  return ChoiceChip(
-                    label: Text(option),
-                    selected: _selectedStyle == option,
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedStyle = selected ? option : null;
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              // Colour selection
-              Text('Farbe', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8.0,
-                children: _colorOptions.map((option) {
-                  return ChoiceChip(
-                    label: Text(option),
-                    selected: _selectedColor == option,
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedColor = selected ? option : null;
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 24),
-              // Contact fields
-              Text('Kontakt', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Telefonnummer',
-                  hintText: '+49 123 4567890',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _addressController,
-                keyboardType: TextInputType.streetAddress,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Adresse (optional)',
-                  hintText: 'Straße, PLZ, Ort',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 24),
-              // Push marketing opt‑in
-              SwitchListTile(
-                title: const Text('Ich möchte Marketing‑Push‑Benachrichtigungen erhalten'),
-                subtitle: const Text('Du kannst diese Einstellung später ändern.'),
-                value: _pushOptIn,
-                activeColor: theme.colorScheme.secondary,
-                onChanged: (value) {
-                  setState(() {
-                    _pushOptIn = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 24),
-              // Continue button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: (_selectedHairLength != null &&
-                          _selectedStyle != null &&
-                          _selectedColor != null)
-                      ? () => _completeOnboarding(context)
-                      : null,
-                  child: const Text('Weiter'),
-                ),
-              ),
-              const SizedBox(height: 16),
-              // Optional skip button
-              TextButton(
-                style: TextButton.styleFrom(
-                  foregroundColor: theme.colorScheme.onSurface,
-                ),
-                onPressed: () => Navigator.of(context).pushReplacementNamed('/home'),
-                child: const Text('Überspringen'),
-              ),
-            ],
+            ),
           ),
         ),
       ),
