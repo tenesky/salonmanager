@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 // while it is under local development.
 import 'features/auth/pages/welcome_page.dart';
 import 'features/auth/pages/login_page.dart';
+// Import the splash page to display on app startup. This simple
+// introductory screen shows the logo and a loading indicator before
+// navigating to the welcome page.
+import 'features/auth/pages/splash_page.dart';
 // Import newly created authentication and onboarding pages.
 import 'features/auth/pages/two_factor_page.dart';
 import 'features/auth/pages/register_customer_page.dart';
@@ -147,9 +151,17 @@ class MyApp extends StatelessWidget {
               // styling across the app.
               theme: lightTheme,
               darkTheme: darkTheme,
-              // Define the initial route and route table.
-              initialRoute: '/',
+              // Define the initial route and route table. Use the splash
+              // page as the first screen so users see the loading
+              // animation before landing on the welcome page. The splash
+              // page will navigate to '/' (WelcomePage) after a
+              // short delay.
+              initialRoute: '/splash',
               routes: {
+        // Splash screen shown on app launch. It displays the app logo
+        // with a loading indicator and automatically navigates to
+        // the welcome page after a brief delay.
+        '/splash': (context) => const SplashPage(),
         '/': (context) => const WelcomePage(),
         '/login': (context) => const LoginPage(),
         '/two-factor': (context) => const TwoFactorPage(),

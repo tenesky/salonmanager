@@ -88,7 +88,13 @@ class _LoginPageState extends State<LoginPage> {
       body: ThemedBackground(
         child: Container(
           // Overlay a translucent colour on top of the patterned background.
-          color: brightness == Brightness.dark ? Colors.black.withOpacity(0.6) : Colors.white.withOpacity(0.6),
+          // Use a slightly lower opacity to allow more of the pattern
+          // to shine through, matching the visual density of the provided
+          // mockup.  Dark mode uses black with 40% opacity; light mode
+          // uses white with 40% opacity.
+          color: brightness == Brightness.dark
+              ? Colors.black.withOpacity(0.4)
+              : Colors.white.withOpacity(0.4),
           child: SafeArea(
             child: Form(
               key: _formKey,
@@ -282,17 +288,22 @@ class _LoginPageState extends State<LoginPage> {
                             Text(
                               'Not a member? ',
                               style: TextStyle(
-                                color: brightness == Brightness.dark ? Colors.white70 : Colors.black54,
+                                color: brightness == Brightness.dark
+                                    ? Colors.white70
+                                    : Colors.black54,
                               ),
                             ),
                             GestureDetector(
                               onTap: () {
-                                Navigator.of(context).pushNamed('/register-customer');
+                                Navigator.of(context)
+                                    .pushNamed('/register-customer');
                               },
                               child: Text(
                                 'Register now',
                                 style: TextStyle(
-                                  color: brightness == Brightness.dark ? Colors.white : Colors.black,
+                                  // Highlight the call‑to‑action in the accent
+                                  // colour (gold/yellow) instead of black/white
+                                  color: accent,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
