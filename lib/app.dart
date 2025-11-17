@@ -123,6 +123,10 @@ import 'features/booking/pages/booking_professional_detail_page.dart';
 import 'features/settings/pages/notification_settings_page.dart';
 // Import the user preferences page for editing onboarding details in the profile.
 import 'features/settings/pages/user_preferences_page.dart';
+import 'features/settings/pages/profile_settings_page.dart';
+import 'features/settings/pages/appearance_settings_page.dart';
+import 'features/settings/pages/language_settings_page.dart';
+import 'features/settings/pages/privacy_settings_page.dart';
 import 'features/pos/pages/pos_page.dart';
 
 // Import theme
@@ -317,6 +321,20 @@ class MyApp extends StatelessWidget {
         // appointment a reminder should be sent and whether Push and
         // E‑Mail notifications are enabled【73678961014422†L1502-L1505】.
         '/settings/reminder': (context) => const ReminderSettingsPage(),
+        // Route to the main profile settings page for normal users. This
+        // screen displays the user's avatar, name and handle along
+        // with common settings options.  It is used for customers
+        // and non‑admin users; salon owners and admins will have a
+        // different settings page.
+        '/settings/profile': (context) => const ProfileSettingsPage(),
+        // Route to the appearance settings placeholder.  Allows users
+        // to modify theme preferences (dark mode, colours) in future.
+        '/settings/appearance': (context) => const AppearanceSettingsPage(),
+        // Route to the language settings placeholder.  Provides
+        // language selection once localisation is implemented.
+        '/settings/language': (context) => const LanguageSettingsPage(),
+        // Route to the privacy and security settings placeholder.
+        '/settings/privacy': (context) => const PrivacySettingsPage(),
         // Route to the loyalty overview page for customers. Displays
         // current points, level and rewards. Implements Screen 53
         // (Treue‑Übersicht) with static demo data for now.

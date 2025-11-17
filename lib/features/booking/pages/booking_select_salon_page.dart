@@ -372,24 +372,77 @@ class _BookingSelectSalonPageState extends State<BookingSelectSalonPage> {
           Expanded(
             child: _showMap ? _buildMapView(filtered) : _buildListView(filtered),
           ),
-        ],
-      ),
-      // Continue button at bottom
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ElevatedButton(
-          onPressed: _selectedSalonId != null
-              ? () {
-                  // Navigate to the next step of the booking wizard. For
-                  // now this is a placeholder route.
-                  Navigator.of(context).pushNamed('/booking/select-service');
-                }
-              : null,
-          child: const Text('Weiter'),
-        ),
-      ),
-    );
-  }
+            // Continue button within page body
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _selectedSalonId != null
+                      ? () {
+                          Navigator.of(context).pushNamed('/booking/select-service');
+                        }
+                      : null,
+                  child: const Text('Weiter'),
+                ),
+              ),
+            ),
+         ],
+       ),
+       bottomNavigationBar: _buildBottomNav(context, currentIndex: 2),
+     );
+   }
+
+   /// Builds the persistent bottom navigation bar used throughout the app.
+   /// [currentIndex] indicates the active tab. For booking pages we use index 2.
+   Widget _buildBottomNav(BuildContext context, {required int currentIndex}) {
+     final theme = Theme.of(context);
+     final brightness = theme.brightness;
+     final accent = theme.colorScheme.secondary;
+     return BottomNavigationBar(
+       type: BottomNavigationBarType.fixed,
+       currentIndex: currentIndex,
+       selectedItemColor: accent,
+       unselectedItemColor:
+           brightness == Brightness.dark ? Colors.white70 : Colors.black54,
+       backgroundColor:
+           brightness == Brightness.dark ? Colors.black : Colors.white,
+       items: const [
+         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+         BottomNavigationBarItem(icon: Icon(Icons.photo), label: 'Galerie'),
+         BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Buchen'),
+         BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Termine'),
+         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+       ],
+       onTap: (index) {
+         switch (index) {
+           case 0:
+             Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+             break;
+           case 1:
+             Navigator.of(context).pushNamed('/gallery');
+             break;
+           case 2:
+             Navigator.of(context).pushNamed('/booking/select-salon');
+             break;
+           case 3:
+             if (!AuthService.isLoggedIn()) {
+               Navigator.of(context).pushNamed('/login');
+             } else {
+               Navigator.of(context).pushNamed('/profile/bookings');
+             }
+             break;
+           case 4:
+             if (!AuthService.isLoggedIn()) {
+               Navigator.of(context).pushNamed('/login');
+             } else {
+               Navigator.of(context).pushNamed('/settings/profile');
+             }
+             break;
+         }
+       },
+     );
+   }
 
   /// Builds the list view of salons. Each item shows basic details and
   /// allows selection. The selected item is indicated with a check

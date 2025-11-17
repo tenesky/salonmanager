@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../services/auth_service.dart';
 
 /// A settings page that allows stylists or managers to configure automatic
 /// appointment reminders. Users can decide how far in advance they wish
@@ -70,6 +71,58 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
       const SnackBar(content: Text('Erinnerungen gespeichert')),
     );
     Navigator.pop(context);
+  }
+
+  /// Builds a bottom navigation bar consistent with other pages.  The
+  /// [currentIndex] determines which tab is highlighted.  On settings
+  /// pages the Profile tab is selected (index 4).
+  Widget _buildBottomNav(BuildContext context, {required int currentIndex}) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      currentIndex: currentIndex,
+      selectedItemColor: accent,
+      unselectedItemColor:
+          brightness == Brightness.dark ? Colors.white70 : Colors.black54,
+      backgroundColor:
+          brightness == Brightness.dark ? Colors.black : Colors.white,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.photo), label: 'Galerie'),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today), label: 'Buchen'),
+        BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Termine'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+      ],
+      onTap: (index) {
+        switch (index) {
+          case 0:
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil('/home', (route) => false);
+            break;
+          case 1:
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil('/gallery', (route) => false);
+            break;
+          case 2:
+            Navigator.of(context).pushNamed('/booking/select-salon');
+            break;
+          case 3:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/profile/bookings');
+            }
+            break;
+          case 4:
+            Navigator.of(context).pushNamedAndRemoveUntil(
+                '/settings/profile', (route) => false);
+            break;
+        }
+      },
+    );
   }
 
   @override
@@ -163,15 +216,16 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
               });
             },
           ),
-        ],
-      ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ElevatedButton(
-          onPressed: _savePreferences,
-          child: const Text('Speichern'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+          child: ElevatedButton(
+            onPressed: _savePreferences,
+            child: const Text('Speichern'),
+          ),
         ),
+      ],
       ),
+      bottomNavigationBar: _buildBottomNav(context, currentIndex: 4),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../services/auth_service.dart';
 
 /// Sixth step of the booking wizard: additional information and image upload.
 ///
@@ -36,6 +37,57 @@ class _BookingAdditionalInfoPageState extends State<BookingAdditionalInfoPage> {
   final TextEditingController _notesController = TextEditingController();
   final List<XFile> _images = [];
   final ImagePicker _picker = ImagePicker();
+
+  /// Builds the persistent bottom navigation bar used throughout the app.
+  /// [currentIndex] indicates the active tab. For booking pages we use index 2.
+  Widget _buildBottomNav(BuildContext context, {required int currentIndex}) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      currentIndex: currentIndex,
+      selectedItemColor: accent,
+      unselectedItemColor:
+          brightness == Brightness.dark ? Colors.white70 : Colors.black54,
+      backgroundColor:
+          brightness == Brightness.dark ? Colors.black : Colors.white,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.photo), label: 'Galerie'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Buchen'),
+        BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Termine'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+      ],
+      onTap: (index) {
+        switch (index) {
+          case 0:
+            Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+            break;
+          case 1:
+            Navigator.of(context).pushNamed('/gallery');
+            break;
+          case 2:
+            Navigator.of(context).pushNamed('/booking/select-salon');
+            break;
+          case 3:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/profile/bookings');
+            }
+            break;
+          case 4:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/settings/profile');
+            }
+            break;
+        }
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -102,132 +154,140 @@ class _BookingAdditionalInfoPageState extends State<BookingAdditionalInfoPage> {
       appBar: AppBar(
         title: const Text('Zusatzinfos'),
       ),
-      body: Column(
-        children: [
-          // Step indicator 6/8
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: LinearProgressIndicator(
-                    value: 6 / 8,
-                    minHeight: 4,
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Step indicator 6/8
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: LinearProgressIndicator(
+                      value: 6 / 8,
+                      minHeight: 4,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                const Text('6/8'),
-              ],
+                  const SizedBox(width: 8),
+                  const Text('6/8'),
+                ],
+              ),
             ),
-          ),
-          // Notes field
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Wünsche / Hinweise',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                TextField(
-                  controller: _notesController,
-                  maxLength: 2000,
-                  maxLines: 5,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: 'Weitere Details zu deiner Buchung…',
+            // Notes field
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Wünsche / Hinweise',
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: _notesController,
+                    maxLength: 2000,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Weitere Details zu deiner Buchung…',
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          // Image upload area
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Bilder (max. 5)',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                TextButton.icon(
-                  onPressed: remaining > 0 ? _pickImages : null,
-                  icon: const Icon(Icons.add_a_photo),
-                  label: Text('Hinzufügen ($remaining)'),
-                ),
-              ],
+            // Image upload area
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Bilder (max. 5)',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  TextButton.icon(
+                    onPressed: remaining > 0 ? _pickImages : null,
+                    icon: const Icon(Icons.add_a_photo),
+                    label: Text('Hinzufügen ($remaining)'),
+                  ),
+                ],
+              ),
             ),
-          ),
-          // Previews of selected images
-          if (_images.isNotEmpty)
-            SizedBox(
-              height: 100,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _images.length,
-                itemBuilder: (context, index) {
-                  final imageFile = File(_images[index].path);
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            imageFile,
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.cover,
+            // Previews of selected images
+            if (_images.isNotEmpty)
+              SizedBox(
+                height: 100,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _images.length,
+                  itemBuilder: (context, index) {
+                    final imageFile = File(_images[index].path);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(
+                              imageFile,
+                              width: 80,
+                              height: 80,
+                              fit: BoxFit.cover,
+                            ),
                           ),
-                        ),
-                        // Remove badge
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: GestureDetector(
-                            onTap: () => _removeImage(index),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.6),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                color: Colors.white,
-                                size: 16,
+                          // Remove badge
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: () => _removeImage(index),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.6),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.close,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            // DSGVO notice
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Text(
+                'Hinweis: Mit dem Hochladen von Bildern erklärst du dich mit der DSGVO-konformen Verarbeitung einverstanden.',
+                style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
               ),
             ),
-          // DSGVO notice
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Text(
-              'Hinweis: Mit dem Hochladen von Bildern erklärst du dich mit der DSGVO-konformen Verarbeitung einverstanden.',
-              style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
+            // Continue button
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    await _saveDraft();
+                    Navigator.of(context).pushNamed('/booking/payment');
+                  },
+                  child: const Text('Weiter'),
+                ),
+              ),
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ElevatedButton(
-          onPressed: () async {
-            await _saveDraft();
-            Navigator.of(context).pushNamed('/booking/payment');
-          },
-          child: const Text('Weiter'),
+          ],
         ),
       ),
+      bottomNavigationBar: _buildBottomNav(context, currentIndex: 2),
     );
   }
 }

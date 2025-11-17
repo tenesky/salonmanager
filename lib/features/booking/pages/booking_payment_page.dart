@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../services/auth_service.dart';
 
 /// Seventh step of the booking wizard: payment.
 ///
@@ -25,6 +26,57 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
   // Deposit amount when anzahlung is selected
   final TextEditingController _depositController = TextEditingController();
   bool _acceptedTerms = false;
+
+  /// Builds the persistent bottom navigation bar used throughout the app.
+  /// [currentIndex] indicates the active tab. For booking pages we use index 2.
+  Widget _buildBottomNav(BuildContext context, {required int currentIndex}) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      currentIndex: currentIndex,
+      selectedItemColor: accent,
+      unselectedItemColor:
+          brightness == Brightness.dark ? Colors.white70 : Colors.black54,
+      backgroundColor:
+          brightness == Brightness.dark ? Colors.black : Colors.white,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.photo), label: 'Galerie'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Buchen'),
+        BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Termine'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+      ],
+      onTap: (index) {
+        switch (index) {
+          case 0:
+            Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+            break;
+          case 1:
+            Navigator.of(context).pushNamed('/gallery');
+            break;
+          case 2:
+            Navigator.of(context).pushNamed('/booking/select-salon');
+            break;
+          case 3:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/profile/bookings');
+            }
+            break;
+          case 4:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/settings/profile');
+            }
+            break;
+        }
+      },
+    );
+  }
 
   /// Returns whether the current payment selection is valid.  For
   /// bar payments no further input is required.  For online or
@@ -78,24 +130,26 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
       appBar: AppBar(
         title: const Text('Zahlung'),
       ),
-      body: Column(
-        children: [
-          // Step indicator 7/8
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: LinearProgressIndicator(
-                    value: 7 / 8,
-                    minHeight: 4,
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Step indicator 7/8
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: LinearProgressIndicator(
+                      value: 7 / 8,
+                      minHeight: 4,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                const Text('7/8'),
-              ],
+                  const SizedBox(width: 8),
+                  const Text('7/8'),
+                ],
+              ),
             ),
-          ),
           // Payment method selection (Online, Bar, Rechnung)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -226,20 +280,25 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
               ),
             ),
           ),
+          // Continue button
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _acceptedTerms && _isValidSelection()
+                    ? () async {
+                        await _saveDraft();
+                        Navigator.of(context).pushNamed('/booking/summary');
+                      }
+                    : null,
+                child: const Text('Weiter'),
+              ),
+            ),
+          ),
         ],
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ElevatedButton(
-          onPressed: _acceptedTerms && _isValidSelection()
-              ? () async {
-                  await _saveDraft();
-                  Navigator.of(context).pushNamed('/booking/summary');
-                }
-              : null,
-          child: const Text('Weiter'),
-        ),
-      ),
+      bottomNavigationBar: _buildBottomNav(context, currentIndex: 2),
     );
   }
 

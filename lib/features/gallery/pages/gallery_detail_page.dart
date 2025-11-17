@@ -157,7 +157,7 @@ class _GalleryDetailPageState extends State<GalleryDetailPage> {
               if (!AuthService.isLoggedIn()) {
                 Navigator.of(context).pushNamed('/login');
               } else {
-                Navigator.of(context).pushNamed('/crm/customer', arguments: {'id': 1});
+                Navigator.of(context).pushNamed('/settings/profile');
               }
               break;
           }

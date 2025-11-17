@@ -136,7 +136,12 @@ class _GalleryProfilePageState extends State<GalleryProfilePage>
               }
               break;
             case 4:
-              // Already on profile
+              // Navigate to general profile settings
+              if (!AuthService.isLoggedIn()) {
+                Navigator.of(context).pushNamed('/login');
+              } else {
+                Navigator.of(context).pushNamed('/settings/profile');
+              }
               break;
           }
         },

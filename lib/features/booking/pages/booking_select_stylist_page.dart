@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../services/db_service.dart';
+import '../../../services/auth_service.dart';
 
 /// Third step of the booking wizard: select a stylist.  
 ///
@@ -334,20 +335,77 @@ class _BookingSelectStylistPageState extends State<BookingSelectStylistPage> {
               },
             ),
           ),
+          ],
+          // Continue button within the page body
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  // The stylist selection is optional. The auto assignment is
+                  // preselected by default so the continue button is always
+                  // enabled.
+                  Navigator.of(context).pushNamed('/booking/select-date');
+                },
+                child: const Text('Weiter'),
+              ),
+            ),
+          ),
         ],
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ElevatedButton(
-          onPressed: () {
-            // The stylist selection is optional. The auto assignment is
-            // preselected by default so the continue button is always
-            // enabled.
-            Navigator.of(context).pushNamed('/booking/select-date');
-          },
-          child: const Text('Weiter'),
-        ),
-      ),
+      bottomNavigationBar: _buildBottomNav(context, currentIndex: 2),
+    );
+  }
+
+  /// Builds the persistent bottom navigation bar used throughout the app.
+  /// [currentIndex] indicates the active tab. For booking pages we use index 2.
+  Widget _buildBottomNav(BuildContext context, {required int currentIndex}) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      currentIndex: currentIndex,
+      selectedItemColor: accent,
+      unselectedItemColor:
+          brightness == Brightness.dark ? Colors.white70 : Colors.black54,
+      backgroundColor:
+          brightness == Brightness.dark ? Colors.black : Colors.white,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.photo), label: 'Galerie'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Buchen'),
+        BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Termine'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+      ],
+      onTap: (index) {
+        switch (index) {
+          case 0:
+            Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+            break;
+          case 1:
+            Navigator.of(context).pushNamed('/gallery');
+            break;
+          case 2:
+            Navigator.of(context).pushNamed('/booking/select-salon');
+            break;
+          case 3:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/profile/bookings');
+            }
+            break;
+          case 4:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/settings/profile');
+            }
+            break;
+        }
+      },
     );
   }
 }

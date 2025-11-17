@@ -266,7 +266,7 @@ class _BottomNav extends StatelessWidget {
             if (!AuthService.isLoggedIn()) {
               Navigator.of(context).pushNamed('/login');
             } else {
-              Navigator.of(context).pushNamed('/crm/customer', arguments: {'id': 1});
+              Navigator.of(context).pushNamed('/settings/profile');
             }
             break;
         }

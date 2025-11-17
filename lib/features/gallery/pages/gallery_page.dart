@@ -296,11 +296,11 @@ class _GalleryPageState extends State<GalleryPage> {
                 Navigator.of(context).pushNamed('/profile/bookings');
               }
               break;
-            case 4:
+          case 4:
               if (!AuthService.isLoggedIn()) {
                 Navigator.of(context).pushNamed('/login');
               } else {
-                Navigator.of(context).pushNamed('/crm/customer', arguments: {'id': 1});
+                Navigator.of(context).pushNamed('/settings/profile');
               }
               break;
           }

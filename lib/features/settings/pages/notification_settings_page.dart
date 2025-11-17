@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Import AuthService to check login state in the bottom navigation bar.
+import '../../../services/auth_service.dart';
+
 /// Allows users to customise their notification preferences.
 ///
 /// This simple settings page provides toggles for various push
@@ -92,6 +95,58 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     Navigator.pop(context);
   }
 
+  /// Builds a bottom navigation bar similar to other pages.  The
+  /// [currentIndex] parameter highlights the active tab.  On settings
+  /// pages, the Profile tab (index 4) is selected.
+  Widget _buildBottomNav(BuildContext context, {required int currentIndex}) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      currentIndex: currentIndex,
+      selectedItemColor: accent,
+      unselectedItemColor:
+          brightness == Brightness.dark ? Colors.white70 : Colors.black54,
+      backgroundColor:
+          brightness == Brightness.dark ? Colors.black : Colors.white,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.photo), label: 'Galerie'),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today), label: 'Buchen'),
+        BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Termine'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+      ],
+      onTap: (index) {
+        switch (index) {
+          case 0:
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil('/home', (route) => false);
+            break;
+          case 1:
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil('/gallery', (route) => false);
+            break;
+          case 2:
+            Navigator.of(context).pushNamed('/booking/select-salon');
+            break;
+          case 3:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/profile/bookings');
+            }
+            break;
+          case 4:
+            Navigator.of(context).pushNamedAndRemoveUntil(
+                '/settings/profile', (route) => false);
+            break;
+        }
+      },
+    );
+  }
+
   /// Opens a time picker for selecting either the start or end of the
   /// quiet period.  When a time is chosen it is stored in
   /// [_quietStart] or [_quietEnd] accordingly and the UI is updated.
@@ -121,6 +176,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
         title: const Text('Benachrichtigungen'),
       ),
       body: ListView(
+        padding: const EdgeInsets.only(bottom: 80.0),
         children: [
           SwitchListTile(
             title: const Text('Buchungsbestätigungen'),
@@ -172,7 +228,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
           const Divider(height: 24),
           SwitchListTile(
             title: const Text('Push-Benachrichtigungen'),
-            subtitle: const Text('Aktiviere oder deaktiviere Push-Notifications'),
+            subtitle:
+                const Text('Aktiviere oder deaktiviere Push-Notifications'),
             value: _pushEnabled,
             onChanged: (value) {
               setState(() {
@@ -182,7 +239,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
           ),
           SwitchListTile(
             title: const Text('E-Mail-Benachrichtigungen'),
-            subtitle: const Text('Aktiviere oder deaktiviere E-Mail-Notifications'),
+            subtitle: const Text(
+                'Aktiviere oder deaktiviere E-Mail-Notifications'),
             value: _emailEnabled,
             onChanged: (value) {
               setState(() {
@@ -190,15 +248,17 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
               });
             },
           ),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: ElevatedButton(
+              onPressed: _savePreferences,
+              child: const Text('Speichern'),
+            ),
+          ),
         ],
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ElevatedButton(
-          onPressed: _savePreferences,
-          child: const Text('Speichern'),
-        ),
-      ),
+      bottomNavigationBar: _buildBottomNav(context, currentIndex: 4),
     );
   }
 }

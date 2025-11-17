@@ -482,12 +482,11 @@ class _HomePageState extends State<HomePage> {
               }
               break;
             case 4:
-              // Profile
+              // Profile tab: show profile settings for logged in users
               if (!AuthService.isLoggedIn()) {
                 Navigator.of(context).pushNamed('/login');
               } else {
-                // Use CRM profile as placeholder; in a real app this would be a user profile page
-                Navigator.of(context).pushNamed('/crm/customer', arguments: {'id': 1});
+                Navigator.of(context).pushNamed('/settings/profile');
               }
               break;
           }

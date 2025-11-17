@@ -198,6 +198,59 @@ class _GalleryUploadPageState extends State<GalleryUploadPage> {
           ),
         ),
       ),
+      // Add persistent bottom navigation bar with the gallery tab selected (index 1).
+      bottomNavigationBar: _buildBottomNav(context, currentIndex: 1),
+    );
+  }
+
+  /// Builds a bottom navigation bar.  Uses [currentIndex] to select
+  /// the active tab.  This page uses index 1 for the gallery.
+  Widget _buildBottomNav(BuildContext context, {required int currentIndex}) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      currentIndex: currentIndex,
+      selectedItemColor: accent,
+      unselectedItemColor:
+          brightness == Brightness.dark ? Colors.white70 : Colors.black54,
+      backgroundColor:
+          brightness == Brightness.dark ? Colors.black : Colors.white,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.photo), label: 'Galerie'),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today), label: 'Buchen'),
+        BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Termine'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+      ],
+      onTap: (index) {
+        switch (index) {
+          case 0:
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil('/home', (route) => false);
+            break;
+          case 1:
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil('/gallery', (route) => false);
+            break;
+          case 2:
+            Navigator.of(context).pushNamed('/booking/select-salon');
+            break;
+          case 3:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/profile/bookings');
+            }
+            break;
+          case 4:
+            Navigator.of(context).pushNamedAndRemoveUntil(
+                '/settings/profile', (route) => false);
+            break;
+        }
+      },
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../services/db_service.dart';
+import '../../../services/auth_service.dart';
 
 /// Allows users to view and update their personal preferences that were
 /// collected during onboarding.  Preferences include gender, preferred
@@ -165,6 +166,7 @@ class _UserPreferencesPageState extends State<UserPreferencesPage> {
       return Scaffold(
         appBar: AppBar(title: const Text('Profil‑Einstellungen')),
         body: const Center(child: CircularProgressIndicator()),
+        bottomNavigationBar: _buildBottomNav(context, currentIndex: 4),
       );
     }
     return Scaffold(
@@ -242,6 +244,59 @@ class _UserPreferencesPageState extends State<UserPreferencesPage> {
           ],
         ),
       ),
+      bottomNavigationBar: _buildBottomNav(context, currentIndex: 4),
+    );
+  }
+
+  /// Builds a bottom navigation bar consistent with other pages.  The
+  /// [currentIndex] selects which tab is highlighted; for the
+  /// preferences page the Profile tab is active (index 4).
+  Widget _buildBottomNav(BuildContext context, {required int currentIndex}) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      currentIndex: currentIndex,
+      selectedItemColor: accent,
+      unselectedItemColor:
+          brightness == Brightness.dark ? Colors.white70 : Colors.black54,
+      backgroundColor:
+          brightness == Brightness.dark ? Colors.black : Colors.white,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.photo), label: 'Galerie'),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today), label: 'Buchen'),
+        BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Termine'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+      ],
+      onTap: (index) {
+        switch (index) {
+          case 0:
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil('/home', (route) => false);
+            break;
+          case 1:
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil('/gallery', (route) => false);
+            break;
+          case 2:
+            Navigator.of(context).pushNamed('/booking/select-salon');
+            break;
+          case 3:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/profile/bookings');
+            }
+            break;
+          case 4:
+            Navigator.of(context).pushNamedAndRemoveUntil(
+                '/settings/profile', (route) => false);
+            break;
+        }
+      },
     );
   }
 

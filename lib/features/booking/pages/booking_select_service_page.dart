@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../services/db_service.dart';
+import '../../../services/auth_service.dart';
 
 /// Second step of the booking wizard: select a service. This screen
 /// presents the available services grouped into tabs for Damen,
@@ -228,41 +229,96 @@ class _BookingSelectServicePageState extends State<BookingSelectServicePage>
               }),
             ),
           ),
+          // Summary and continue button within the page body
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Builder(builder: (context) {
+                  final totals = _calculateTotals();
+                  final double price = totals['price'] as double;
+                  final int duration = totals['duration'] as int;
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Gesamt: €${price.toStringAsFixed(2)}',
+                          style: Theme.of(context).textTheme.bodyMedium),
+                      Text('Dauer: ${duration} min',
+                          style: Theme.of(context).textTheme.bodyMedium),
+                    ],
+                  );
+                }),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _selectedServiceIds.isNotEmpty
+                        ? () {
+                            Navigator.of(context)
+                                .pushNamed('/booking/select-stylist');
+                          }
+                        : null,
+                    child: const Text('Weiter'),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
-      // Continue button. Enabled only if a service is selected.
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Summary of selected services (price and duration)
-            Builder(builder: (context) {
-              final totals = _calculateTotals();
-              final double price = totals['price'] as double;
-              final int duration = totals['duration'] as int;
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Gesamt: €${price.toStringAsFixed(2)}',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                  Text('Dauer: ${duration} min',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ],
-              );
-            }),
-            const SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: _selectedServiceIds.isNotEmpty
-                  ? () {
-                      Navigator.of(context).pushNamed('/booking/select-stylist');
-                    }
-                  : null,
-              child: const Text('Weiter'),
-            ),
-          ],
-        ),
-      ),
+      bottomNavigationBar: _buildBottomNav(context, currentIndex: 2),
+    );
+  }
+
+  /// Builds the persistent bottom navigation bar used throughout the app.
+  /// [currentIndex] indicates the active tab. For booking pages we use index 2.
+  Widget _buildBottomNav(BuildContext context, {required int currentIndex}) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      currentIndex: currentIndex,
+      selectedItemColor: accent,
+      unselectedItemColor:
+          brightness == Brightness.dark ? Colors.white70 : Colors.black54,
+      backgroundColor:
+          brightness == Brightness.dark ? Colors.black : Colors.white,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.photo), label: 'Galerie'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Buchen'),
+        BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Termine'),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+      ],
+      onTap: (index) {
+        switch (index) {
+          case 0:
+            Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+            break;
+          case 1:
+            Navigator.of(context).pushNamed('/gallery');
+            break;
+          case 2:
+            Navigator.of(context).pushNamed('/booking/select-salon');
+            break;
+          case 3:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/profile/bookings');
+            }
+            break;
+          case 4:
+            if (!AuthService.isLoggedIn()) {
+              Navigator.of(context).pushNamed('/login');
+            } else {
+              Navigator.of(context).pushNamed('/settings/profile');
+            }
+            break;
+        }
+      },
     );
   }
 

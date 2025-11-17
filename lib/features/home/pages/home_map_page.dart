@@ -816,8 +816,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
               if (!AuthService.isLoggedIn()) {
                 Navigator.of(context).pushNamed('/login');
               } else {
-                // Navigate to a placeholder CRM page; supply id as an example.
-                Navigator.of(context).pushNamed('/crm/customer', arguments: {'id': 1});
+                Navigator.of(context).pushNamed('/settings/profile');
               }
               break;
           }
