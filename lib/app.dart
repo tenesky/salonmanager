@@ -26,10 +26,7 @@ import 'features/onboarding/pages/onboarding_salon_page.dart';
 // a Leaflet map with gold markers and a filter drawer according to
 // the screen specification for the interactive map (Modul B)【522868310347694†L209-L214】.
 import 'features/map/pages/salons_map_page.dart';
-// Import the customer map page which displays a simplified map for
-// regular users. This page replaces the generic salons map for
-// customers and supports filters, search and marker selection.
-import 'features/map/pages/customer_map_page.dart';
+import 'features/salon/pages/customer_salon_detail_page.dart';
 // Booking wizard step 1 placeholder
 import 'features/booking/pages/booking_select_salon_page.dart';
 import 'features/booking/pages/booking_select_service_page.dart';
@@ -80,10 +77,6 @@ import 'features/search/pages/global_search_page.dart';
 // Gallery pages
 import 'features/gallery/pages/gallery_page.dart';
 import 'features/gallery/pages/gallery_detail_page.dart';
-import 'features/gallery/pages/gallery_profile_page.dart';
-// Import the salon detail page used in the customer flow. It shows
-// extended information about a salon selected from the map or list.
-import 'features/salon/pages/customer_salon_detail_page.dart';
 // Import pages for salon profile editor and service catalogue editor.  These
 // pages allow salon owners to manage their branding and offerings.  They
 // are conditionally shown to authorised users (e.g. salon owners) via
@@ -214,12 +207,19 @@ class MyApp extends StatelessWidget {
         // Interactive map view. Users can explore salons on a map and
         // refine their search using a filter drawer. This route
         // corresponds to Screen 11/12 in the screen specification.
-        // '/salons/map': (context) => const SalonsMapPage(),
-        // Use the simplified customer map page for normal users.
-        // This page handles search, filtering and marker selection on a
-        // dark themed map matching the design spec.
-        // See below for the customer map route implementation.
-        '/salons/map': (context) => const CustomerMapPage(),
+        '/salons/map': (context) => const SalonsMapPage(),
+        // Displays detailed information about a single salon.  Expects
+        // a Map<String, dynamic> with salon details passed via
+        // Navigator.pushNamed(context, '/salon-info', arguments: {...}).
+        '/salon-info': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return CustomerSalonDetailPage(salon: args);
+          }
+          return const Scaffold(
+            body: Center(child: Text('Keine Details verfügbar.')),
+          );
+        },
         // Placeholder for the first step of the booking wizard. When the
         // quick booking bottom sheet is used on the salon detail page,
         // this route is opened. A full implementation of the wizard
@@ -387,19 +387,6 @@ class MyApp extends StatelessWidget {
         // gallery module.
         '/gallery': (context) => const GalleryPage(),
         '/gallery/detail': (context) => const GalleryDetailPage(),
-        '/gallery/profile': (context) => const GalleryProfilePage(),
-        // Route for salon detail within the customer flow. Expects a
-        // Map<String, dynamic> argument representing the salon. When no
-        // argument is provided, a fallback page is shown.
-        '/salon-info': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments;
-          if (args is Map<String, dynamic>) {
-            return CustomerSalonDetailPage(salon: args);
-          }
-          return const Scaffold(
-            body: Center(child: Text('Keine Saloninformationen verfügbar.')),
-          );
-        },
         // Analytics dashboard. Provides an overview of revenue, utilisation,
         // top services, no‑show rates, loyalty and inventory KPIs.
         '/reports': (context) => ReportsPage(),

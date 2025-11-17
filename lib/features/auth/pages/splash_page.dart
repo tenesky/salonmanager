@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../../services/auth_service.dart';
+import 'package:salonmanager/services/auth_service.dart';
 
 /// A simple splash page that shows the SalonManager logo on a dark
 /// background while the app is launching. After a short delay it
@@ -20,22 +20,24 @@ class _SplashPageState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    // Delay for a brief moment while also checking if the user is
-    // already authenticated. If a session exists, we bypass the
-    // login screen and navigate directly to the home page. This
-    // prevents users from having to log in again each time they
-    // reopen the app. The timer still shows the splash for at least
-    // two seconds.
+    // Delay briefly and then decide whether to show the login page or
+    // skip directly to the home page.  If the user has an active
+    // Supabase session, the app will navigate to '/home'.  Otherwise
+    // it navigates to '/login'.  This ensures that sessions persist
+    // across app restarts without requiring the user to log in again.
     Timer(const Duration(seconds: 2), () {
       if (!mounted) return;
-      // If a session is active, navigate directly to the home page.
-      // Otherwise fall back to the login screen. Supabase
-      // automatically persists sessions across launches, so
-      // AuthService.isLoggedIn() will return true if the user has
-      // previously logged in and not explicitly logged out.
-      if (AuthService.isLoggedIn()) {
-        Navigator.of(context).pushReplacementNamed('/home');
-      } else {
+      try {
+        // Use AuthService to check if a session exists.  This call is
+        // synchronous because Supabase caches the session in memory.
+        final bool loggedIn = AuthService.isLoggedIn();
+        if (loggedIn) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        } else {
+          Navigator.of(context).pushReplacementNamed('/login');
+        }
+      } catch (_) {
+        // Fallback to login on any unexpected error.
         Navigator.of(context).pushReplacementNamed('/login');
       }
     });

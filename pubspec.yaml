@@ -64,11 +64,6 @@ dependencies:
   # simplifies generating CSV strings from lists of maps.
   csv: ^5.0.0
 
-  # Removed aws_s3_client dependency.  The gallery uploads now use the
-  # built‑in Supabase storage client via Supabase Flutter.  This avoids
-  # relying on an external S3 client library and resolves version
-  # conflicts when running `flutter pub get`.
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -249,8 +249,9 @@ class _HomePageState extends State<HomePage> {
                           child: _showMap
                               ? FlutterMap(
                                   options: MapOptions(
-                                    center: _userLocation ?? const LatLng(0.0, 0.0),
-                                    zoom: _userLocation != null ? 13.0 : 2.0,
+                                    center: _userLocation ??
+                                        const LatLng(48.137154, 11.576124),
+                                    zoom: 13.0,
                                     interactiveFlags:
                                         InteractiveFlag.pinchZoom | InteractiveFlag.drag,
                                   ),
