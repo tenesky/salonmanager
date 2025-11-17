@@ -83,6 +83,8 @@ import 'features/search/pages/global_search_page.dart';
 // Gallery pages
 import 'features/gallery/pages/gallery_page.dart';
 import 'features/gallery/pages/gallery_detail_page.dart';
+import 'features/gallery/pages/gallery_upload_page.dart';
+import 'features/gallery/pages/gallery_profile_page.dart';
 // Import pages for salon profile editor and service catalogue editor.  These
 // pages allow salon owners to manage their branding and offerings.  They
 // are conditionally shown to authorised users (e.g. salon owners) via
@@ -404,6 +406,8 @@ class MyApp extends StatelessWidget {
         // gallery module.
         '/gallery': (context) => const GalleryPage(),
         '/gallery/detail': (context) => const GalleryDetailPage(),
+        '/gallery/upload': (context) => const GalleryUploadPage(),
+        '/gallery/profile': (context) => const GalleryProfilePage(),
         // Analytics dashboard. Provides an overview of revenue, utilisation,
         // top services, no‑show rates, loyalty and inventory KPIs.
         '/reports': (context) => ReportsPage(),
