@@ -284,32 +284,21 @@ class DbService {
     if (userId == null) {
       return;
     }
-    // Attempt to update an existing record.  If no row is updated,
-    // insert a new one.
-    final updateResponse = await _client
+    // Upsert the onboarding_complete flag.  The upsert will update the
+    // existing record for the user if present, or insert a new row
+    // otherwise.  Only the onboarding_complete and updated_at fields
+    // are modified, leaving other columns intact.
+    final Map<String, dynamic> values = {
+      'user_id': userId,
+      'onboarding_complete': true,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    final response = await _client
         .from('customer_preferences')
-        .update({
-          'onboarding_complete': true,
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
-        })
-        .eq('user_id', userId)
+        .upsert(values, onConflict: 'user_id')
         .execute();
-    if (updateResponse.error != null && updateResponse.status != 404 && updateResponse.status != 406) {
-      throw updateResponse.error!;
-    }
-    if (updateResponse.count == 0) {
-      final Map<String, dynamic> values = <String, dynamic>{
-        'user_id': userId,
-        'onboarding_complete': true,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      };
-      final insertResponse = await _client
-          .from('customer_preferences')
-          .upsert(values)
-          .execute();
-      if (insertResponse.error != null) {
-        throw insertResponse.error!;
-      }
+    if (response.error != null) {
+      throw response.error!;
     }
   }
 
@@ -1163,6 +1152,38 @@ class DbService {
         .from('gallery_likes')
         .insert({'user_id': userId, 'image_id': imageId})
         .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Inserts a new gallery image record into the `gallery_images` table.
+  ///
+  /// The [url] should be the storage path returned from
+  /// [uploadGalleryImage]. The [description] contains an optional
+  /// caption. The optional [length], [style] and [colour] fields
+  /// correspond to filters used on the gallery page. The current
+  /// authenticated user becomes the owner of the image. Throws if
+  /// the user is not logged in or if the insert fails.
+  static Future<void> addGalleryImage({
+    required String url,
+    required String description,
+    String? length,
+    String? style,
+    String? colour,
+  }) async {
+    final String? userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw Exception('User not logged in');
+    }
+    final response = await _client.from('gallery_images').insert({
+      'user_id': userId,
+      'url': url,
+      'description': description,
+      'length': length,
+      'style': style,
+      'colour': colour,
+    }).execute();
     if (response.error != null) {
       throw response.error!;
     }

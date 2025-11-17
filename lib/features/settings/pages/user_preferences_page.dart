@@ -161,9 +161,10 @@ class _UserPreferencesPageState extends State<UserPreferencesPage> {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
     if (_loading) {
-      return const Scaffold(
-        appBar: AppBar(title: Text('Profil‑Einstellungen')),
-        body: Center(child: CircularProgressIndicator()),
+      // Use non-const Scaffold because AppBar is not a const constructor
+      return Scaffold(
+        appBar: AppBar(title: const Text('Profil‑Einstellungen')),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
     return Scaffold(

@@ -375,7 +375,13 @@ class _HomePageState extends State<HomePage> {
                               color: Colors.transparent,
                               child: InkWell(
                                 onTap: () {
-                                  Navigator.of(context).pushNamed('/salons/map');
+                                  // Navigate to the new full screen map page. This
+                                  // route displays a fully featured map with
+                                  // search, filter and preview card functionality
+                                  // according to the design. Using '/home/map'
+                                  // instead of '/salons/map' ensures the home map
+                                  // has the correct UI.
+                                  Navigator.of(context).pushNamed('/home/map');
                                 },
                               ),
                             ),

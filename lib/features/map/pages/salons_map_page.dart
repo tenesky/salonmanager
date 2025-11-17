@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import '../../../services/auth_service.dart';
 
 /// Model representing a salon location with basic attributes used for
 /// filtering and display on the map. In a real application this
@@ -82,10 +83,39 @@ class _SalonsMapPageState extends State<SalonsMapPage> {
   double _minRating = 0.0;
   bool _onlyFree = false;
 
+  // Whether the list view is shown instead of the map. When true, a list
+  // of salons is displayed instead of the interactive map. This flag
+  // toggles via the Map/List buttons in the top overlay.
+  bool _showList = false;
+
+  // Controller for the search field. Typing into this field filters
+  // salons by their names. The listener clears the selected salon
+  // whenever the search query changes.
+  final TextEditingController _searchController = TextEditingController();
+
+  // Holds the currently selected salon. When non-null, a preview card
+  // appears at the bottom of the screen showing details about the salon.
+  SalonLocation? _selectedSalon;
+
   @override
   void initState() {
     super.initState();
     _loadUserLocation();
+    // Clear the selected salon whenever the search input changes.
+    _searchController.addListener(() {
+      if (mounted) {
+        setState(() {
+          _selectedSalon = null;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // Dispose the search controller to free resources.
+    _searchController.dispose();
+    super.dispose();
   }
 
   /// Requests location permissions and obtains the current position
@@ -143,7 +173,13 @@ class _SalonsMapPageState extends State<SalonsMapPage> {
   /// to calculate kilometres between points.
   List<SalonLocation> get _filteredSalons {
     final distanceCalc = Distance();
+    // Normalise search query to lower case for case-insensitive matching.
+    final query = _searchController.text.trim().toLowerCase();
     return _salons.where((salon) {
+      // Filter by search query: ensure the salon name contains the query.
+      if (query.isNotEmpty && !salon.name.toLowerCase().contains(query)) {
+        return false;
+      }
       // Filter by distance
       final distKm = distanceCalc.as(LengthUnit.Kilometer, _mapCenter, salon.location);
       if (distKm > _maxDistance) return false;

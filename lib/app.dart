@@ -26,6 +26,12 @@ import 'features/onboarding/pages/onboarding_salon_page.dart';
 // a Leaflet map with gold markers and a filter drawer according to
 // the screen specification for the interactive map (Modul B)【522868310347694†L209-L214】.
 import 'features/map/pages/salons_map_page.dart';
+// Import the full screen home map page for the mini map. This page
+// replicates the interactive map design shown in the UI specification
+// when customers tap the mini map on the home page. It includes a
+// map/list toggle, search bar, filter button and bottom salon
+// preview cards.
+import 'features/home/pages/home_map_page.dart';
 import 'features/salon/pages/customer_salon_detail_page.dart';
 // Booking wizard step 1 placeholder
 import 'features/booking/pages/booking_select_salon_page.dart';
@@ -77,6 +83,8 @@ import 'features/search/pages/global_search_page.dart';
 // Gallery pages
 import 'features/gallery/pages/gallery_page.dart';
 import 'features/gallery/pages/gallery_detail_page.dart';
+import 'features/gallery/pages/gallery_upload_page.dart';
+import 'features/gallery/pages/gallery_profile_page.dart';
 // Import pages for salon profile editor and service catalogue editor.  These
 // pages allow salon owners to manage their branding and offerings.  They
 // are conditionally shown to authorised users (e.g. salon owners) via
@@ -210,6 +218,12 @@ class MyApp extends StatelessWidget {
         // refine their search using a filter drawer. This route
         // corresponds to Screen 11/12 in the screen specification.
         '/salons/map': (context) => const SalonsMapPage(),
+        // Route for full screen home map view.  When the user taps
+        // the mini map on the home page this page is opened.  It
+        // displays a large map with nearby salons, a search field,
+        // filter controls, a map/list toggle and preview cards when
+        // tapping a marker.
+        '/home/map': (context) => const HomeMapPage(),
         // Displays detailed information about a single salon.  Expects
         // a Map<String, dynamic> with salon details passed via
         // Navigator.pushNamed(context, '/salon-info', arguments: {...}).
@@ -392,6 +406,8 @@ class MyApp extends StatelessWidget {
         // gallery module.
         '/gallery': (context) => const GalleryPage(),
         '/gallery/detail': (context) => const GalleryDetailPage(),
+        '/gallery/upload': (context) => const GalleryUploadPage(),
+        '/gallery/profile': (context) => const GalleryProfilePage(),
         // Analytics dashboard. Provides an overview of revenue, utilisation,
         // top services, no‑show rates, loyalty and inventory KPIs.
         '/reports': (context) => ReportsPage(),

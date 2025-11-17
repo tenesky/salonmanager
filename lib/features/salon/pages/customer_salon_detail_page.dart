@@ -32,6 +32,12 @@ class CustomerSalonDetailPage extends StatelessWidget {
       return 0.0;
     }();
     final String imageUrl = salon['image_url']?.toString() ?? '';
+    // Load the logo image if provided. Accept various keys for flexibility.
+    final String logoImage =
+        salon['logo_image']?.toString() ??
+        salon['logoImage']?.toString() ??
+        salon['logo_url']?.toString() ??
+        '';
 
     return ThemedBackground(
       child: Scaffold(
@@ -78,27 +84,67 @@ class CustomerSalonDetailPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        name,
-                        style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      // Rating stars and price
+                      // Display the salon name, rating and price alongside a small logo
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: List.generate(5, (index) {
-                              if (rating >= index + 1) {
-                                return const Icon(Icons.star, size: 16, color: Colors.amber);
-                              } else if (rating > index) {
-                                return const Icon(Icons.star_half, size: 16, color: Colors.amber);
-                              } else {
-                                return const Icon(Icons.star_border, size: 16, color: Colors.amber);
-                              }
-                            }),
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: theme.colorScheme.surfaceVariant,
+                            backgroundImage: logoImage.isNotEmpty
+                                ? (logoImage.startsWith('http')
+                                    ? NetworkImage(logoImage)
+                                    : AssetImage(logoImage) as ImageProvider)
+                                : null,
+                            child: logoImage.isEmpty
+                                ? const Icon(Icons.image, color: Colors.grey)
+                                : null,
                           ),
-                          const SizedBox(width: 8),
-                          Text(priceLevel, style: theme.textTheme.bodyMedium),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  name,
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: List.generate(5, (index) {
+                                    if (rating >= index + 1) {
+                                      return const Icon(Icons.star,
+                                          size: 16, color: Colors.amber);
+                                    } else if (rating > index) {
+                                      return const Icon(Icons.star_half,
+                                          size: 16, color: Colors.amber);
+                                    } else {
+                                      return const Icon(Icons.star_border,
+                                          size: 16, color: Colors.amber);
+                                    }
+                                  }),
+                                ),
+                                const SizedBox(height: 4),
+                                // Display the price level as a row of euro icons. Each
+                                // character in the priceLevel string results in one
+                                // euro symbol. If the string is empty the row will be
+                                // empty.
+                                Row(
+                                  children: priceLevel.isNotEmpty
+                                      ? priceLevel
+                                          .split('')
+                                          .map((_) => const Icon(
+                                                Icons.euro,
+                                                size: 16,
+                                                color: Colors.grey,
+                                              ))
+                                          .toList()
+                                      : <Widget>[],
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -135,6 +181,27 @@ class CustomerSalonDetailPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       const Text('Noch keine Bewertungen', style: TextStyle(color: Colors.grey)),
+                      const SizedBox(height: 24),
+                      // Button to launch the booking wizard
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            // Navigate to the booking wizard. If the user is
+                            // not logged in, redirect to login first.
+                            if (!AuthService.isLoggedIn()) {
+                              Navigator.of(context).pushNamed('/login');
+                            } else {
+                              Navigator.of(context).pushNamed('/booking/select-salon');
+                            }
+                          },
+                          icon: const Icon(Icons.calendar_today),
+                          label: const Text('Termin buchen'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16.0),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),

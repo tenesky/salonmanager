@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../services/db_service.dart';
+import '../../../services/auth_service.dart';
 
 /// A simple public gallery page displaying hair style images in a
 /// responsive grid. Users can filter by hair length, style and
@@ -15,9 +17,10 @@ class GalleryPage extends StatefulWidget {
 }
 
 class _GalleryPageState extends State<GalleryPage> {
-  // Define some demo images with metadata. In a future iteration
-  // these will be loaded from the Supabase `gallery_images` table.
-  final List<Map<String, dynamic>> _images = [
+  // Gallery images loaded from Supabase. Initially populated with demo
+  // images as placeholders until real data is fetched. Each map
+  // contains keys: id, asset/url, length, style, colour, description.
+  List<Map<String, dynamic>> _images = [
     {
       'id': 1,
       'asset': 'assets/background_light.png',
@@ -61,150 +64,424 @@ class _GalleryPageState extends State<GalleryPage> {
   String? _selectedStyle;
   String? _selectedColour;
 
+  // Controller for search input.
+  final TextEditingController _searchController = TextEditingController();
+
+  // Track liked image ids.
+  final Set<int> _likedImageIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImages();
+  }
+
+  /// Loads gallery images from Supabase. If the query fails, the
+  /// placeholder images remain. The fetched images will replace the
+  /// `_images` list and the UI will be rebuilt.
+  Future<void> _loadImages() async {
+    try {
+      final fetched = await DbService.getGalleryImages();
+      setState(() {
+        // Merge remote data with placeholder images if remote list is empty.
+        if (fetched.isNotEmpty) {
+          _images = fetched;
+        }
+      });
+    } catch (_) {
+      // In case of an error, keep placeholder images.
+    }
+  }
+
   /// Returns the list of images matching the current filter settings.
   List<Map<String, dynamic>> get _filteredImages {
+    final String query = _searchController.text.trim().toLowerCase();
     return _images.where((img) {
       final bool lengthOk = _selectedLength == null || img['length'] == _selectedLength;
       final bool styleOk = _selectedStyle == null || img['style'] == _selectedStyle;
       final bool colourOk = _selectedColour == null || img['colour'] == _selectedColour;
-      return lengthOk && styleOk && colourOk;
+      final bool matchesSearch = query.isEmpty ||
+          (img['description']?.toString().toLowerCase().contains(query) ?? false) ||
+          (img['length']?.toString().toLowerCase().contains(query) ?? false) ||
+          (img['style']?.toString().toLowerCase().contains(query) ?? false) ||
+          (img['colour']?.toString().toLowerCase().contains(query) ?? false);
+      return lengthOk && styleOk && colourOk && matchesSearch;
     }).toList();
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final accent = theme.colorScheme.secondary;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Galerie'),
-      ),
-      body: Column(
-        children: [
-          // Filter chips row. Use Wrap to allow chips to wrap on small screens.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                children: [
-                  _buildDropdownFilter(
-                    label: 'Länge',
-                    value: _selectedLength,
-                    options: _lengthOptions,
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedLength = val;
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  _buildDropdownFilter(
-                    label: 'Stil',
-                    value: _selectedStyle,
-                    options: _styleOptions,
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedStyle = val;
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  _buildDropdownFilter(
-                    label: 'Farbe',
-                    value: _selectedColour,
-                    options: _colourOptions,
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedColour = val;
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  // Reset filters button
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _selectedLength = null;
-                        _selectedStyle = null;
-                        _selectedColour = null;
-                      });
-                    },
-                    icon: const Icon(Icons.clear),
-                    label: const Text('Reset'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 3 / 4,
-                ),
-                itemCount: _filteredImages.length,
-                itemBuilder: (context, index) {
-                  final img = _filteredImages[index];
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        '/gallery/detail',
-                        arguments: img,
-                      );
-                    },
-                    child: Card(
-                      elevation: 2,
-                      clipBehavior: Clip.antiAlias,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Image.asset(
-                              img['asset'] as String,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          // Overlay gradient and text
-                          Positioned(
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
-                                ),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              child: Text(
-                                img['description'] as String,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: brightness == Brightness.dark
+                          ? Colors.black.withOpacity(0.1)
+                          : Colors.black.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(24.0),
                     ),
-                  );
-                },
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          onTap: _openFilterSheet,
+                          child: Row(
+                            children: const [
+                              Icon(Icons.filter_list, size: 20),
+                              SizedBox(width: 4),
+                              Icon(Icons.arrow_drop_down, size: 20),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            decoration: const InputDecoration(
+                              hintText: 'Hinted search text',
+                              border: InputBorder.none,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.search),
+                          onPressed: () {
+                            FocusScope.of(context).unfocus();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: GridView.builder(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 1.0,
+                      ),
+                      itemCount: _filteredImages.length,
+                      itemBuilder: (context, index) {
+                        final img = _filteredImages[index];
+                        final bool liked = _likedImageIds.contains(img['id'] as int);
+                        return GestureDetector(
+                          onTap: () {
+                            // Pass the liked status along with the image data
+                            final Map<String, dynamic> args = Map<String, dynamic>.from(img);
+                            args['liked'] = liked;
+                            Navigator.pushNamed(
+                              context,
+                              '/gallery/detail',
+                              arguments: args,
+                            );
+                          },
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12.0),
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: img.containsKey('asset') && img['asset'] != null
+                                      ? Image.asset(
+                                          img['asset'] as String,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : img.containsKey('url') && img['url'] != null
+                                          ? Image.network(
+                                              img['url'] as String,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : Container(
+                                              color: Colors.grey.shade300,
+                                            ),
+                                ),
+                                Positioned(
+                                  bottom: 8,
+                                  right: 8,
+                                  child: GestureDetector(
+                                    onTap: () => _toggleLike(img['id'] as int),
+                                    child: Icon(
+                                      liked ? Icons.favorite : Icons.favorite_border,
+                                      color: liked ? Colors.amber : Colors.grey,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Positioned(
+              bottom: 96,
+              right: 16,
+              child: FloatingActionButton(
+                heroTag: 'gallery_add',
+                backgroundColor: brightness == Brightness.dark
+                    ? Colors.grey.shade800
+                    : Colors.grey.shade200,
+                onPressed: _openUploadPage,
+                child: const Icon(Icons.add, color: Colors.black),
               ),
             ),
-          ),
-        ],
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: GestureDetector(
+                onTap: _openProfilePage,
+                child: CircleAvatar(
+                  radius: 24,
+                  backgroundColor: brightness == Brightness.dark
+                      ? Colors.grey.shade800
+                      : Colors.grey.shade200,
+                  child: const Icon(Icons.person, color: Colors.black),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        currentIndex: 1,
+        selectedItemColor: accent,
+        unselectedItemColor:
+            brightness == Brightness.dark ? Colors.white70 : Colors.black54,
+        backgroundColor:
+            brightness == Brightness.dark ? Colors.black : Colors.white,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.photo), label: 'Galerie'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Buchen'),
+          BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Termine'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
+        ],
+        onTap: (index) {
+          switch (index) {
+            case 0:
+              Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+              break;
+            case 1:
+              break;
+            case 2:
+              Navigator.of(context).pushNamed('/booking/select-salon');
+              break;
+            case 3:
+              if (!AuthService.isLoggedIn()) {
+                Navigator.of(context).pushNamed('/login');
+              } else {
+                Navigator.of(context).pushNamed('/profile/bookings');
+              }
+              break;
+            case 4:
+              if (!AuthService.isLoggedIn()) {
+                Navigator.of(context).pushNamed('/login');
+              } else {
+                Navigator.of(context).pushNamed('/crm/customer', arguments: {'id': 1});
+              }
+              break;
+          }
+        },
+      ),
+    );
+  }
+
+  Future<void> _toggleLike(int imageId) async {
+    final bool isLiked = _likedImageIds.contains(imageId);
+    if (!AuthService.isLoggedIn()) {
+      Navigator.of(context).pushNamed('/login');
+      return;
+    }
+    try {
+      if (isLiked) {
+        await DbService.unlikeGalleryImage(imageId);
+        _likedImageIds.remove(imageId);
+      } else {
+        await DbService.likeGalleryImage(imageId);
+        _likedImageIds.add(imageId);
+      }
+      setState(() {});
+    } catch (_) {}
+  }
+
+  void _openFilterSheet() {
+    String? tempLength = _selectedLength;
+    String? tempStyle = _selectedStyle;
+    String? tempColour = _selectedColour;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: MediaQuery.of(context).viewInsets,
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Filter',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Länge'),
+                    const SizedBox(height: 4),
+                    DropdownButton<String?>(
+                      isExpanded: true,
+                      value: tempLength,
+                      hint: const Text('Alle'),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Alle'),
+                        ),
+                        ..._lengthOptions.map((length) => DropdownMenuItem<String?>(
+                              value: length,
+                              child: Text(length),
+                            )),
+                      ],
+                      onChanged: (value) {
+                        setModalState(() {
+                          tempLength = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Stil'),
+                    const SizedBox(height: 4),
+                    DropdownButton<String?>(
+                      isExpanded: true,
+                      value: tempStyle,
+                      hint: const Text('Alle'),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Alle'),
+                        ),
+                        ..._styleOptions.map((style) => DropdownMenuItem<String?>(
+                              value: style,
+                              child: Text(style),
+                            )),
+                      ],
+                      onChanged: (value) {
+                        setModalState(() {
+                          tempStyle = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Farbe'),
+                    const SizedBox(height: 4),
+                    DropdownButton<String?>(
+                      isExpanded: true,
+                      value: tempColour,
+                      hint: const Text('Alle'),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Alle'),
+                        ),
+                        ..._colourOptions.map((colour) => DropdownMenuItem<String?>(
+                              value: colour,
+                              child: Text(colour),
+                            )),
+                      ],
+                      onChanged: (value) {
+                        setModalState(() {
+                          tempColour = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            setModalState(() {
+                              tempLength = null;
+                              tempStyle = null;
+                              tempColour = null;
+                            });
+                          },
+                          child: const Text('Reset'),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedLength = tempLength;
+                              _selectedStyle = tempStyle;
+                              _selectedColour = tempColour;
+                            });
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Anwenden'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _openUploadPage() {
+    Navigator.of(context).pushNamed('/gallery/upload');
+  }
+
+  void _openProfilePage() {
+    final List<Map<String, dynamic>> likedImages = _images
+        .where((img) => _likedImageIds.contains(img['id'] as int))
+        .toList();
+    final List<Map<String, dynamic>> myImages = [];
+    Navigator.of(context).pushNamed(
+      '/gallery/profile',
+      arguments: {
+        'likedImages': likedImages,
+        'myImages': myImages,
+      },
     );
   }
 
