@@ -64,12 +64,10 @@ dependencies:
   # simplifies generating CSV strings from lists of maps.
   csv: ^5.0.0
 
-  # AWS S3 client to upload images directly to a Supabase S3‑compatible bucket.
-  # This library implements AWS Signature V4 and provides simple methods to
-  # upload bytes to a bucket using an endpoint.  We use it for the gallery
-  # upload functionality so that pictures are stored on the remote bucket and
-  # never persist on the client device.
-  aws_s3_client: ^1.5.0
+  # Removed aws_s3_client dependency.  The gallery uploads now use the
+  # built‑in Supabase storage client via Supabase Flutter.  This avoids
+  # relying on an external S3 client library and resolves version
+  # conflicts when running `flutter pub get`.
 
 dev_dependencies:
   flutter_test:

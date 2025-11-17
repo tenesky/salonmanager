@@ -17,6 +17,13 @@ class DbService {
   /// initialised in `main.dart` via [Supabase.initialize].
   static final SupabaseClient _client = Supabase.instance.client;
 
+  /// Name of the storage bucket used for gallery images.  All
+  /// gallery uploads are stored in this bucket under the `private/`
+  /// directory.  When retrieving images, signed URLs are
+  /// generated via this bucket name.  Ensure this matches the
+  /// bucket created in your Supabase storage dashboard.
+  static const String _galleryBucket = 'salonmanager';
+
   /// Retrieves all stylists from the database.  Stylists are ordered
   /// by their `id`.  Each returned map contains the fields
   /// `id`, `name` and `color`.
@@ -557,8 +564,34 @@ class DbService {
     if (response.error != null) {
       throw response.error!;
     }
-    final data = response.data as List<dynamic>;
-    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+    final List<dynamic> data = response.data as List<dynamic>;
+    final List<Map<String, dynamic>> images = [];
+    // Convert each row to a map and replace the stored path with a
+    // signed URL.  This ensures private images can be displayed
+    // without exposing the underlying storage path.  Signed URLs
+    // expire after seven days (604800 seconds).  If URL generation
+    // fails, the original path remains unchanged.
+    for (final item in data) {
+      final Map<String, dynamic> row = Map<String, dynamic>.from(item);
+      final String? path = row['url'] as String?;
+      if (path != null && path.isNotEmpty) {
+        try {
+          final signed = await _client.storage
+              .from(_galleryBucket)
+              .createSignedUrl(path, 604800);
+          // The Supabase storage API returns a StorageResponse<String>
+          // where the signed URL is stored in the `data` field.  Use
+          // `data` instead of `url` when checking the result.
+          if (signed.error == null && signed.data != null) {
+            row['url'] = signed.data as String;
+          }
+        } catch (_) {
+          // Ignore errors; leave url unchanged.
+        }
+      }
+      images.add(row);
+    }
+    return images;
   }
 
   /// Returns the ids of images liked by the current user.  If the
@@ -698,8 +731,26 @@ class DbService {
     if (response.error != null) {
       throw response.error!;
     }
-    final data = response.data as List<dynamic>;
-    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+    final List<dynamic> data = response.data as List<dynamic>;
+    final List<Map<String, dynamic>> images = [];
+    for (final item in data) {
+      final Map<String, dynamic> row = Map<String, dynamic>.from(item);
+      final String? path = row['url'] as String?;
+      if (path != null && path.isNotEmpty) {
+        try {
+          final signed = await _client.storage
+              .from(_galleryBucket)
+              .createSignedUrl(path, 604800);
+          if (signed.error == null && signed.data != null) {
+            row['url'] = signed.data as String;
+          }
+        } catch (_) {
+          // ignore errors
+        }
+      }
+      images.add(row);
+    }
+    return images;
   }
 
   /// Returns a list of gallery images liked by the current user.  A
