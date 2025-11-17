@@ -113,6 +113,8 @@ import 'features/schedule/pages/leave_page.dart';
 import 'features/schedule/pages/timesheet_page.dart';
 import 'features/booking/pages/booking_professional_detail_page.dart';
 import 'features/settings/pages/notification_settings_page.dart';
+// Import the user preferences page for editing onboarding details in the profile.
+import 'features/settings/pages/user_preferences_page.dart';
 import 'features/pos/pages/pos_page.dart';
 
 // Import theme
@@ -262,6 +264,9 @@ class MyApp extends StatelessWidget {
             body: Center(child: Text('Keine Details verfügbar.')),
           );
         },
+        // Route to update personal onboarding preferences.  This page allows
+        // users to modify gender, language and hair characteristics.
+        '/profile/preferences': (context) => const UserPreferencesPage(),
         // Route for stylists to view and edit booking details. This
         // professional detail page allows adjusting price/duration per
         // service, adding notes and uploading images (Screen 30).

@@ -29,6 +29,10 @@ class HomePage extends StatefulWidget {
 /// bottom navigation bar is used to navigate to the profile page.
 class _HomePageState extends State<HomePage> {
   LatLng? _userLocation;
+  /// Controller for the mini map. Allows us to move the map when the
+  /// user's location is loaded. Without this, the map would remain
+  /// centred on the default coordinates even after setState.
+  final MapController _mapController = MapController();
   final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _salons = [];
   List<Marker> _salonMarkers = [];
@@ -99,7 +103,22 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadFirstName() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final name = prefs.getString('profile.firstName');
+      // Attempt to load the first name from local storage first.
+      String? name = prefs.getString('profile.firstName');
+      // If not available locally, try to fetch from Supabase
+      if (name == null || name.isEmpty) {
+        try {
+          final Map<String, dynamic>? remotePrefs = await DbService.getUserPreferences();
+          final dynamic remoteName = remotePrefs?['first_name'];
+          if (remoteName is String && remoteName.isNotEmpty) {
+            name = remoteName;
+            // Persist locally for future app launches
+            await prefs.setString('profile.firstName', name);
+          }
+        } catch (_) {
+          // ignore errors silently
+        }
+      }
       if (mounted) {
         setState(() {
           _firstName = name;
@@ -127,9 +146,23 @@ class _HomePageState extends State<HomePage> {
         }
       }
       final position = await Geolocator.getCurrentPosition();
-      setState(() {
-        _userLocation = LatLng(position.latitude, position.longitude);
-      });
+      final LatLng location = LatLng(position.latitude, position.longitude);
+      if (mounted) {
+        // Update state
+        setState(() {
+          _userLocation = location;
+        });
+        // After the frame is rendered, move the map to the user location
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            // Move to current zoom level; if zoom is null default to 13
+            final double currentZoom = _mapController.zoom;
+            _mapController.move(location, currentZoom == 0 ? 13.0 : currentZoom);
+          } catch (_) {
+            // ignore if controller not ready
+          }
+        });
+      }
     } catch (e) {
       // Ignore errors silently; location remains null
     }
@@ -248,6 +281,7 @@ class _HomePageState extends State<HomePage> {
                         Positioned.fill(
                           child: _showMap
                               ? FlutterMap(
+                                  mapController: _mapController,
                                   options: MapOptions(
                                     center: _userLocation ??
                                         const LatLng(48.137154, 11.576124),

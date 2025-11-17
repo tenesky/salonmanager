@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 
 /// Model representing a salon location with basic attributes used for
 /// filtering and display on the map. In a real application this
@@ -81,8 +82,60 @@ class _SalonsMapPageState extends State<SalonsMapPage> {
   double _minRating = 0.0;
   bool _onlyFree = false;
 
-  // Map centre. In a real app this would be the user's location.
-  final LatLng _mapCenter = const LatLng(48.137154, 11.576124);
+  @override
+  void initState() {
+    super.initState();
+    _loadUserLocation();
+  }
+
+  /// Requests location permissions and obtains the current position
+  /// using the Geolocator plugin. Once the location is retrieved,
+  /// update the map centre and move the map. If permission is
+  /// denied, the map remains at its default centre.
+  Future<void> _loadUserLocation() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        final newPermission = await Geolocator.requestPermission();
+        if (newPermission == LocationPermission.denied ||
+            newPermission == LocationPermission.deniedForever) {
+          return;
+        }
+      }
+      final position = await Geolocator.getCurrentPosition();
+      final LatLng location = LatLng(position.latitude, position.longitude);
+      if (!mounted) return;
+      setState(() {
+        _userLocation = location;
+        _mapCenter = location;
+      });
+      // Move the map after the next frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          final zoom = _mapController.zoom;
+          _mapController.move(location, zoom == 0 ? 14.0 : zoom);
+        } catch (_) {
+          // ignore
+        }
+      });
+    } catch (_) {
+      // if any error occurs, do nothing
+    }
+  }
+
+  // Map centre. Initially set to Munich; will be updated to the
+  // user's current location when permissions are granted. Using a
+  // mutable variable allows us to update the centre after loading.
+  LatLng _mapCenter = const LatLng(48.137154, 11.576124);
+
+  /// The user's current location. When loaded, this will be used to
+  /// centre the map and filter salons by distance.
+  LatLng? _userLocation;
+
+  /// Controller for the map so we can programmatically move it to
+  /// the current location once loaded.
+  final MapController _mapController = MapController();
 
   /// Returns a filtered list of salons based on the current filter
   /// settings. Distance is computed from a fixed centre for
@@ -125,6 +178,7 @@ class _SalonsMapPageState extends State<SalonsMapPage> {
       body: Stack(
         children: [
           FlutterMap(
+            mapController: _mapController,
             options: MapOptions(
               center: _mapCenter,
               zoom: 14.0,
