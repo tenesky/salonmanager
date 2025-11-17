@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../common/themed_background.dart';
+import '../../../services/db_service.dart';
 
 /// A simple public gallery page displaying hair style images in a
 /// responsive grid. Users can filter by hair length, style and
@@ -15,222 +20,323 @@ class GalleryPage extends StatefulWidget {
 }
 
 class _GalleryPageState extends State<GalleryPage> {
-  // Define some demo images with metadata. In a future iteration
-  // these will be loaded from the Supabase `gallery_images` table.
-  final List<Map<String, dynamic>> _images = [
-    {
-      'id': 1,
-      'asset': 'assets/background_light.png',
-      'length': 'Kurz',
-      'style': 'Modern',
-      'colour': 'Blond',
-      'description': 'Kurzer moderner Schnitt in blond.'
-    },
-    {
-      'id': 2,
-      'asset': 'assets/background_dark.png',
-      'length': 'Mittel',
-      'style': 'Klassisch',
-      'colour': 'Braun',
-      'description': 'Mittellanger klassischer Look in braun.'
-    },
-    {
-      'id': 3,
-      'asset': 'assets/logo_full.png',
-      'length': 'Lang',
-      'style': 'Trend',
-      'colour': 'Rot',
-      'description': 'Langer trendiger Stil in rot.'
-    },
-    {
-      'id': 4,
-      'asset': 'assets/logo_symbol.png',
-      'length': 'Mittel',
-      'style': 'Modern',
-      'colour': 'Blond',
-      'description': 'Mittellanger moderner Stil in blond.'
-    },
-  ];
+  final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _images = [];
+  Set<String> _likedIds = {};
+  bool _loading = true;
 
-  // Available filter options for length, style and colour.
-  final List<String> _lengthOptions = const ['Kurz', 'Mittel', 'Lang'];
-  final List<String> _styleOptions = const ['Klassisch', 'Modern', 'Trend'];
-  final List<String> _colourOptions = const ['Blond', 'Braun', 'Rot'];
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
 
-  String? _selectedLength;
-  String? _selectedStyle;
-  String? _selectedColour;
+  Future<void> _fetchData() async {
+    setState(() {
+      _loading = true;
+    });
+    try {
+      final images = await DbService.getGalleryImages(
+          searchQuery: _searchController.text.trim().isEmpty
+              ? null
+              : _searchController.text.trim());
+      final liked = await DbService.getLikedImageIdsForCurrentUser();
+      if (mounted) {
+        setState(() {
+          _images = images;
+          _likedIds = liked.toSet();
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
 
-  /// Returns the list of images matching the current filter settings.
-  List<Map<String, dynamic>> get _filteredImages {
-    return _images.where((img) {
-      final bool lengthOk = _selectedLength == null || img['length'] == _selectedLength;
-      final bool styleOk = _selectedStyle == null || img['style'] == _selectedStyle;
-      final bool colourOk = _selectedColour == null || img['colour'] == _selectedColour;
-      return lengthOk && styleOk && colourOk;
-    }).toList();
+  Future<void> _toggleLike(String imageId) async {
+    final currentlyLiked = _likedIds.contains(imageId);
+    if (currentlyLiked) {
+      await DbService.unlikeGalleryImage(imageId);
+      _likedIds.remove(imageId);
+    } else {
+      await DbService.likeGalleryImage(imageId);
+      _likedIds.add(imageId);
+    }
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _pickAndUploadImage() async {
+    final picker = ImagePicker();
+    final XFile? picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    final fileName = picked.name;
+    // Ask for description via dialog
+    final descriptionController = TextEditingController();
+    final description = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Bildbeschreibung'),
+          content: TextField(
+            controller: descriptionController,
+            maxLines: 3,
+            decoration: const InputDecoration(hintText: 'Beschreibung eingeben'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Abbrechen'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, descriptionController.text),
+              child: const Text('Hochladen'),
+            ),
+          ],
+        );
+      },
+    );
+    if (description == null) return;
+    try {
+      final url = await DbService.uploadGalleryImage(bytes, fileName);
+      await DbService.createGalleryImage(url: url, description: description);
+      await _fetchData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Fehler beim Hochladen: $e')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Galerie'),
-      ),
-      body: Column(
-        children: [
-          // Filter chips row. Use Wrap to allow chips to wrap on small screens.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                children: [
-                  _buildDropdownFilter(
-                    label: 'Länge',
-                    value: _selectedLength,
-                    options: _lengthOptions,
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedLength = val;
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  _buildDropdownFilter(
-                    label: 'Stil',
-                    value: _selectedStyle,
-                    options: _styleOptions,
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedStyle = val;
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  _buildDropdownFilter(
-                    label: 'Farbe',
-                    value: _selectedColour,
-                    options: _colourOptions,
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedColour = val;
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  // Reset filters button
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _selectedLength = null;
-                        _selectedStyle = null;
-                        _selectedColour = null;
-                      });
-                    },
-                    icon: const Icon(Icons.clear),
-                    label: const Text('Reset'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 3 / 4,
-                ),
-                itemCount: _filteredImages.length,
-                itemBuilder: (context, index) {
-                  final img = _filteredImages[index];
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        '/gallery/detail',
-                        arguments: img,
-                      );
-                    },
-                    child: Card(
-                      elevation: 2,
-                      clipBehavior: Clip.antiAlias,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+      body: ThemedBackground(
+        child: Container(
+          color: brightness == Brightness.dark
+              ? Colors.black.withOpacity(0.4)
+              : Colors.white.withOpacity(0.4),
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                          decoration: BoxDecoration(
+                            color: brightness == Brightness.dark
+                                ? Colors.white.withOpacity(0.1)
+                                : Colors.black.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(24.0),
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            style: TextStyle(
+                              color: brightness == Brightness.dark
+                                  ? Colors.white
+                                  : Colors.black,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Suche',
+                              hintStyle: TextStyle(
+                                color: brightness == Brightness.dark
+                                    ? Colors.white54
+                                    : Colors.black45,
+                              ),
+                              border: InputBorder.none,
+                              icon: Icon(
+                                Icons.search,
+                                color: brightness == Brightness.dark
+                                    ? Colors.white54
+                                    : Colors.black45,
+                              ),
+                            ),
+                            onSubmitted: (_) => _fetchData(),
+                          ),
+                        ),
                       ),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Image.asset(
-                              img['asset'] as String,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          // Overlay gradient and text
-                          Positioned(
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
-                                ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.filter_list),
+                        onPressed: () {
+                          // TODO: implement filter options if desired
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                if (_loading)
+                  const Expanded(child: Center(child: CircularProgressIndicator()))
+                else
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: GridView.builder(
+                        itemCount: _images.length,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 3 / 4,
+                        ),
+                        itemBuilder: (context, index) {
+                          final img = _images[index];
+                          final id = img['id'].toString();
+                          final url = img['url'] as String;
+                          final desc = img['description'] as String? ?? '';
+                          final liked = _likedIds.contains(id);
+                          return GestureDetector(
+                            onTap: () {
+                              Navigator.pushNamed(
+                                context,
+                                '/gallery/detail',
+                                arguments: {
+                                  'id': id,
+                                  'url': url,
+                                  'description': desc,
+                                },
+                              ).then((_) => _fetchData());
+                            },
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16.0),
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: CachedNetworkImage(
+                                      imageUrl: url,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, _) => Container(
+                                        color: Colors.grey[300],
+                                      ),
+                                      errorWidget: (context, url, error) => const Icon(Icons.broken_image),
+                                    ),
+                                  ),
+                                  // Heart icon
+                                  Positioned(
+                                    bottom: 8,
+                                    right: 8,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(24.0),
+                                      onTap: () async {
+                                        await _toggleLike(id);
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4.0),
+                                        decoration: BoxDecoration(
+                                          color: brightness == Brightness.dark
+                                              ? Colors.black.withOpacity(0.4)
+                                              : Colors.white.withOpacity(0.7),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          liked ? Icons.favorite : Icons.favorite_border,
+                                          size: 20,
+                                          color: liked
+                                              ? theme.colorScheme.secondary
+                                              : (brightness == Brightness.dark
+                                                  ? Colors.white
+                                                  : Colors.black),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              child: Text(
-                                img['description'] as String,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
                             ),
-                          ),
-                        ],
+                          );
+                        },
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+              ],
             ),
+          ),
+        ),
+      ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: 'add',
+            onPressed: _pickAndUploadImage,
+            child: const Icon(Icons.add),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'profile',
+            mini: true,
+            onPressed: () {
+              Navigator.pushNamed(context, '/gallery/profile');
+            },
+            child: const Icon(Icons.person),
           ),
         ],
       ),
-    );
-  }
-
-  /// Builds a simple dropdown for selecting a filter option. Passing
-  /// `null` resets the filter. The dropdown displays the current
-  /// selection and allows changing it.
-  Widget _buildDropdownFilter({
-    required String label,
-    required String? value,
-    required List<String> options,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return DropdownButton<String?>(
-      value: value,
-      hint: Text(label),
-      onChanged: onChanged,
-      items: [
-        const DropdownMenuItem<String?>(
-          value: null,
-          child: Text('Alle'),
-        ),
-        ...options.map((opt) => DropdownMenuItem<String?>(
-              value: opt,
-              child: Text(opt),
-            )),
-      ],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 1,
+        onTap: (index) {
+          switch (index) {
+            case 0:
+              Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+              break;
+            case 1:
+              // Already on gallery page
+              break;
+            case 2:
+              Navigator.pushNamedAndRemoveUntil(
+                  context, '/booking/select-salon', (route) => false);
+              break;
+            case 3:
+              Navigator.pushNamedAndRemoveUntil(
+                  context, '/profile/bookings', (route) => false);
+              break;
+            case 4:
+              Navigator.pushNamedAndRemoveUntil(
+                  context, '/profile', (route) => false);
+              break;
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.photo_library),
+            label: 'Galerie',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.event),
+            label: 'Buchen',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today),
+            label: 'Termine',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profil',
+          ),
+        ],
+        selectedItemColor: theme.colorScheme.secondary,
+        unselectedItemColor: brightness == Brightness.dark
+            ? Colors.white70
+            : Colors.black54,
+      ),
     );
   }
 }

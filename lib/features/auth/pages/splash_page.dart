@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../services/auth_service.dart';
 
 /// A simple splash page that shows the SalonManager logo on a dark
 /// background while the app is launching. After a short delay it
@@ -19,11 +20,22 @@ class _SplashPageState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    // Delay for a brief moment before navigating to the login page.
-    // This allows time to display the splash screen and perform any
-    // initialisation tasks if needed in the future.
+    // Delay for a brief moment while also checking if the user is
+    // already authenticated. If a session exists, we bypass the
+    // login screen and navigate directly to the home page. This
+    // prevents users from having to log in again each time they
+    // reopen the app. The timer still shows the splash for at least
+    // two seconds.
     Timer(const Duration(seconds: 2), () {
-      if (mounted) {
+      if (!mounted) return;
+      // If a session is active, navigate directly to the home page.
+      // Otherwise fall back to the login screen. Supabase
+      // automatically persists sessions across launches, so
+      // AuthService.isLoggedIn() will return true if the user has
+      // previously logged in and not explicitly logged out.
+      if (AuthService.isLoggedIn()) {
+        Navigator.of(context).pushReplacementNamed('/home');
+      } else {
         Navigator.of(context).pushReplacementNamed('/login');
       }
     });

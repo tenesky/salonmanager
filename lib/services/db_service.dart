@@ -5,6 +5,7 @@ import 'package:postgrest/postgrest.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
+import 's3_service.dart';
 
 /// A lightweight data service that wraps Supabase operations.  This
 /// service exposes high‑level methods used throughout the app to
@@ -515,6 +516,231 @@ class DbService {
     // automatically throw on failure.
     final String publicUrl = _client.storage.from(bucket).getPublicUrl(filePath);
     return publicUrl;
+  }
+
+  /// Uploads a gallery image using the AWS S3 protocol to the
+  /// Supabase Storage bucket configured in [S3Service].  This
+  /// wrapper converts the provided `List<int>` into a `Uint8List`
+  /// before delegating to [S3Service.uploadGalleryImage].  The
+  /// returned string is the URL which can be stored in the
+  /// `gallery_images` table.  It will point to the private folder
+  /// within the `salonmanager` bucket.  Note: in order for this
+  /// method to succeed the `storage.objects` table must have RLS
+  /// policies allowing authenticated users to insert and select
+  /// private objects, as described in the Supabase documentation.
+  static Future<String> uploadGalleryImage(
+      List<int> fileBytes, String fileName) async {
+    final bytes = Uint8List.fromList(fileBytes);
+    return S3Service.uploadGalleryImage(bytes, fileName);
+  }
+
+  /// Fetches a list of gallery images from the database.  Each
+  /// returned map contains the fields `id`, `user_id`, `salon_id`,
+  /// `url`, `description`, `length`, `style`, `colour` and
+  /// `created_at`.  Results are ordered by creation time (newest
+  /// first).  Optionally pass a [searchQuery] to filter images by
+  /// description (case‑insensitive).  If no query is provided all
+  /// images are returned.  Throws on error.
+  static Future<List<Map<String, dynamic>>> getGalleryImages({
+    String? searchQuery,
+  }) async {
+    dynamic query = _client
+        .from('gallery_images')
+        .select(
+            'id, user_id, salon_id, url, description, length, style, colour, created_at')
+        .order('created_at', ascending: false);
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      final sanitized = searchQuery.trim();
+      query = query.ilike('description', '%$sanitized%');
+    }
+    final response = await query.execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  /// Returns the ids of images liked by the current user.  If the
+  /// user is not logged in an empty list is returned.  Throws on
+  /// error.
+  static Future<List<String>> getLikedImageIdsForCurrentUser() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      return [];
+    }
+    final response = await _client
+        .from('gallery_likes')
+        .select('image_id')
+        .eq('user_id', userId)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    return data
+        .map((e) => (e as Map<String, dynamic>)['image_id'].toString())
+        .toList();
+  }
+
+  /// Likes a gallery image on behalf of the current user.  Inserts a
+  /// row into the `gallery_likes` table.  If the user is not
+  /// logged in this method does nothing.  Throws on error.
+  static Future<void> likeGalleryImage(String imageId) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+    final response = await _client
+        .from('gallery_likes')
+        .insert({'user_id': userId, 'image_id': imageId})
+        .execute();
+    if (response.error != null && response.status != 409) {
+      // ignore conflict errors silently (already liked)
+      throw response.error!;
+    }
+  }
+
+  /// Unlikes a gallery image for the current user.  Deletes the
+  /// corresponding row from `gallery_likes`.  If the user is not
+  /// logged in nothing is deleted.  Throws on error.
+  static Future<void> unlikeGalleryImage(String imageId) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+    final response = await _client
+        .from('gallery_likes')
+        .delete()
+        .eq('user_id', userId)
+        .eq('image_id', imageId)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Creates a new gallery image record in the database.  The
+  /// [url] must point to an existing object in Supabase Storage.  A
+  /// description is required; optional fields [length], [style] and
+  /// [colour] can be provided to support filtering.  Throws on
+  /// error.
+  static Future<void> createGalleryImage({
+    required String url,
+    required String description,
+    String? length,
+    String? style,
+    String? colour,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    final Map<String, dynamic> values = {
+      'url': url,
+      'description': description,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    if (userId != null) values['user_id'] = userId;
+    if (length != null) values['length'] = length;
+    if (style != null) values['style'] = style;
+    if (colour != null) values['colour'] = colour;
+    final response = await _client.from('gallery_images').insert(values).execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Updates the description and optional metadata of an existing
+  /// gallery image.  Only the provided fields are modified.  Throws
+  /// on error.
+  static Future<void> updateGalleryImage({
+    required String id,
+    String? description,
+    String? length,
+    String? style,
+    String? colour,
+  }) async {
+    final Map<String, dynamic> updateData = {};
+    if (description != null) updateData['description'] = description;
+    if (length != null) updateData['length'] = length;
+    if (style != null) updateData['style'] = style;
+    if (colour != null) updateData['colour'] = colour;
+    if (updateData.isEmpty) return;
+    final response = await _client
+        .from('gallery_images')
+        .update(updateData)
+        .eq('id', id)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Deletes a gallery image by its id.  This also cascades the
+  /// deletion of any associated likes.  Throws on error.
+  static Future<void> deleteGalleryImage(String id) async {
+    final response = await _client
+        .from('gallery_images')
+        .delete()
+        .eq('id', id)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+  }
+
+  /// Returns a list of gallery images posted by the given [userId].
+  /// Each map contains the same fields as [getGalleryImages].  If
+  /// [userId] is null, an empty list is returned.  Throws on error.
+  static Future<List<Map<String, dynamic>>> getGalleryImagesByUser(String? userId) async {
+    if (userId == null) return [];
+    final response = await _client
+        .from('gallery_images')
+        .select(
+            'id, user_id, salon_id, url, description, length, style, colour, created_at')
+        .eq('user_id', userId)
+        .order('created_at', ascending: false)
+        .execute();
+    if (response.error != null) {
+      throw response.error!;
+    }
+    final data = response.data as List<dynamic>;
+    return data.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  /// Returns a list of gallery images liked by the current user.  A
+  /// join is performed between `gallery_likes` and `gallery_images`
+  /// to retrieve image details.  If the user is not logged in, an
+  /// empty list is returned.  Throws on error.
+  static Future<List<Map<String, dynamic>>> getLikedGalleryImages() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return [];
+    final response = await _client
+        .rpc('get_liked_gallery_images', params: {'uid': userId});
+    // If the RPC isn't defined return fallback via join
+    if (response.error != null) {
+      // fallback: manual join
+      final likesRes = await _client
+          .from('gallery_likes')
+          .select('image_id')
+          .eq('user_id', userId)
+          .execute();
+      if (likesRes.error != null) {
+        throw likesRes.error!;
+      }
+      final ids = (likesRes.data as List<dynamic>)
+          .map((e) => (e as Map<String, dynamic>)['image_id'].toString())
+          .toList();
+      if (ids.isEmpty) return [];
+      final imagesRes = await _client
+          .from('gallery_images')
+          .select(
+              'id, user_id, salon_id, url, description, length, style, colour, created_at')
+          .in_('id', ids)
+          .execute();
+      if (imagesRes.error != null) {
+        throw imagesRes.error!;
+      }
+      final data = imagesRes.data as List<dynamic>;
+      return data.map((e) => Map<String, dynamic>.from(e)).toList();
+    } else {
+      final data = response.data as List<dynamic>;
+      return data.map((e) => Map<String, dynamic>.from(e)).toList();
+    }
   }
 
   /// Retrieves all services.  Each map includes the service id, name,
