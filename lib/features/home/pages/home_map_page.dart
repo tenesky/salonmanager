@@ -251,7 +251,10 @@ class _HomeMapPageState extends State<HomeMapPage> {
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8.0,
-                      children: ['$', '$$', '$$$'].map((level) {
+                      // Use escaped dollar signs in strings.  In Dart, the dollar
+                      // sign initiates string interpolation, so it must be
+                      // escaped with a backslash to be treated as a literal.
+                      children: ['\$', '\$\$', '\$\$\$'].map((level) {
                         final bool isSelected = tempPriceLevels.contains(level);
                         return FilterChip(
                           label: Text(level),
