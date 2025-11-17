@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-// Import the database service to load salons from Supabase.
-import '../../../services/db_service.dart';
 import 'package:geolocator/geolocator.dart';
 
-// Import the authentication service to handle navigation in the bottom bar.
+// Import our services and models.  DbService provides access to the
+// Supabase backend for loading salons.  AuthService is used to
+// determine navigation targets based on the user's login status.
+import '../../../services/db_service.dart';
 import '../../../services/auth_service.dart';
-// Reuse the SalonLocation model defined in the map feature to describe each salon.
+// Reuse the SalonLocation model defined in the salons map page.  This
+// describes a salon with a name, location, price level, rating and
+// whether free appointments are available.
 import '../../map/pages/salons_map_page.dart' show SalonLocation;
 
 /// A full screen map page that replicates the design shown in the
-/// specification for the interactive map (home screen).  This page
-/// appears when the user taps on the mini map in the home page.  It
-/// displays a large map with nearby salons, a search field, map/list
-/// toggle, filter button and a bottom navigation bar.  When a marker
-/// is tapped, a preview card with salon details and a booking button
+/// specification for the interactive map.  This page appears when
+/// the user taps on the mini map in the home page.  It displays a
+/// large map with nearby salons, a search field, map/list toggle,
+/// filter button and a bottom navigation bar.  When a marker is
+/// tapped, a preview card with salon details and a booking button
 /// appears at the bottom of the screen.  Users can toggle to a list
 /// view via the "List" button.
 class HomeMapPage extends StatefulWidget {
@@ -26,21 +29,23 @@ class HomeMapPage extends StatefulWidget {
 }
 
 class _HomeMapPageState extends State<HomeMapPage> {
-  // List of salons loaded from Supabase. Initially empty; will be
+  // List of salons loaded from Supabase.  Initially empty; will be
   // populated in initState via _loadSalons().
   List<SalonLocation> _salons = [];
-  // Indicates whether salons are being loaded. This flag could be used
+
+  // Indicates whether salons are being loaded.  This flag could be used
   // to show a loading indicator, but for simplicity we ignore it in
   // the UI and only use it internally to prevent duplicate loads.
   bool _loadingSalons = false;
 
-  // Filter state
+  // Filter state used by the search and filter controls.
   double _maxDistance = 10.0; // kilometres
   Set<String> _selectedPriceLevels = {};
   double _minRating = 0.0;
   bool _onlyFree = false;
 
-  // Controls whether the list view is shown instead of the map.
+  // Controls whether the list view is shown instead of the map.  When
+  // true the list is visible; when false the map is visible.
   bool _showList = false;
 
   // Controller for the search bar to filter salons by name.
@@ -49,7 +54,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
   // The currently selected salon for which a preview card is displayed.
   SalonLocation? _selectedSalon;
 
-  // Map centre. Initially set to Munich; will be updated to the
+  // Map centre.  Initially set to Munich; will be updated to the
   // user's current location when permissions are granted.
   LatLng _mapCenter = const LatLng(48.137154, 11.576124);
 
@@ -76,9 +81,15 @@ class _HomeMapPageState extends State<HomeMapPage> {
     });
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   /// Loads salons from the Supabase backend.  This method fetches a
   /// list of salons and maps them into [SalonLocation] objects used
-  /// by the UI. Errors are silently ignored so the page still loads
+  /// by the UI.  Errors are silently ignored so the page still loads
   /// without data if the network fails.
   Future<void> _loadSalons() async {
     if (_loadingSalons) return;
@@ -121,37 +132,31 @@ class _HomeMapPageState extends State<HomeMapPage> {
     }
   }
 
-  // Removed duplicate initState. See earlier in this file for the
-  // actual initState implementation that loads user location and
-  // salons, and registers the search listener.
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  /// Fetches the user's current location and updates the map centre.
+  /// Fetches the user's current location and updates the map centre.  If
+  /// permission is denied the current location remains unchanged.
   Future<void> _loadUserLocation() async {
     try {
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        final newPermission = await Geolocator.requestPermission();
-        if (newPermission == LocationPermission.denied || newPermission == LocationPermission.deniedForever) {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
           return;
         }
       }
-      final position = await Geolocator.getCurrentPosition();
+      final Position position = await Geolocator.getCurrentPosition();
       final LatLng location = LatLng(position.latitude, position.longitude);
       if (!mounted) return;
       setState(() {
         _userLocation = location;
         _mapCenter = location;
       });
-      // Move the map after the next frame is rendered.
+      // Move the map after the next frame is rendered.  This avoids
+      // exceptions if the map has not been built yet.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         try {
-          final zoom = _mapController.zoom;
+          final double zoom = _mapController.zoom;
           _mapController.move(location, zoom == 0 ? 14.0 : zoom);
         } catch (_) {
           // ignore errors if controller not ready
@@ -162,19 +167,23 @@ class _HomeMapPageState extends State<HomeMapPage> {
     }
   }
 
-  /// Computes the filtered list of salons based on search and filters.
+  /// Computes the filtered list of salons based on the search query and
+  /// filter settings.  The search filters by salon name.  The
+  /// distance is measured from [_mapCenter].
   List<SalonLocation> get _filteredSalons {
-    final distanceCalc = Distance();
-    final query = _searchController.text.trim().toLowerCase();
+    final Distance distanceCalc = Distance();
+    final String query = _searchController.text.trim().toLowerCase();
     return _salons.where((salon) {
       if (query.isNotEmpty && !salon.name.toLowerCase().contains(query)) {
         return false;
       }
       // Filter by distance from the current map centre
-      final distKm = distanceCalc.as(LengthUnit.Kilometer, _mapCenter, salon.location);
+      final double distKm =
+          distanceCalc.as(LengthUnit.Kilometer, _mapCenter, salon.location);
       if (distKm > _maxDistance) return false;
       // Filter by price level
-      if (_selectedPriceLevels.isNotEmpty && !_selectedPriceLevels.contains(salon.priceLevel)) {
+      if (_selectedPriceLevels.isNotEmpty &&
+          !_selectedPriceLevels.contains(salon.priceLevel)) {
         return false;
       }
       // Filter by rating
@@ -185,8 +194,10 @@ class _HomeMapPageState extends State<HomeMapPage> {
     }).toList();
   }
 
-  /// Opens the filter bottom sheet allowing the user to adjust
-  /// distance, price level, rating and availability filters.
+  /// Opens the filter bottom sheet allowing the user to adjust distance,
+  /// price level, rating and availability filters.  Temporary values
+  /// are stored in local variables and applied when the user taps
+  /// "Anwenden".
   void _openFilterSheet() {
     double tempDistance = _maxDistance;
     Set<String> tempPriceLevels = {..._selectedPriceLevels};
@@ -213,7 +224,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
                       children: [
                         const Text(
                           'Filter',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          style:
+                              TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close),
@@ -222,7 +234,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text('Maximale Entfernung (km): ${tempDistance.toStringAsFixed(1)}'),
+                    Text('Maximale Entfernung (km): '
+                        '${tempDistance.toStringAsFixed(1)}'),
                     Slider(
                       value: tempDistance,
                       min: 1,
@@ -238,8 +251,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8.0,
-                      children: ['\$', '\$\$', '\$\$\$'].map((level) {
-                        final isSelected = tempPriceLevels.contains(level);
+                      children: ['$', '$$', '$$$'].map((level) {
+                        final bool isSelected = tempPriceLevels.contains(level);
                         return FilterChip(
                           label: Text(level),
                           selected: isSelected,
@@ -302,8 +315,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
     );
   }
 
-  /// Builds a toggle button for the map/list switch.  The active button
-  /// is filled with the accent colour; inactive buttons are
+  /// Builds a toggle button for the map/list switch.  The active
+  /// button is filled with the accent colour; inactive buttons are
   /// transparent with coloured text and icon.
   Widget _buildToggleButton({
     required String label,
@@ -330,7 +343,9 @@ class _HomeMapPageState extends State<HomeMapPage> {
               size: 16,
               color: active
                   ? Colors.black
-                  : (brightness == Brightness.dark ? Colors.white70 : Colors.black54),
+                  : (brightness == Brightness.dark
+                      ? Colors.white70
+                      : Colors.black54),
             ),
             const SizedBox(width: 4),
             Text(
@@ -340,7 +355,9 @@ class _HomeMapPageState extends State<HomeMapPage> {
                 fontWeight: FontWeight.w500,
                 color: active
                     ? Colors.black
-                    : (brightness == Brightness.dark ? Colors.white70 : Colors.black54),
+                    : (brightness == Brightness.dark
+                        ? Colors.white70
+                        : Colors.black54),
               ),
             ),
           ],
@@ -442,16 +459,13 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
   /// Builds a list view of salons.  Each card displays the same
   /// information as the preview card.  Tapping a card selects the
-  /// salon and switches back to the map view.
+  /// salon and opens the detail page.
   Widget _buildListView(ThemeData theme) {
     return ListView.builder(
       padding: const EdgeInsets.only(top: 120.0, bottom: 120.0),
       itemCount: _filteredSalons.length,
       itemBuilder: (context, index) {
         final salon = _filteredSalons[index];
-        // Build a card for each salon. When the card is tapped the
-        // detailed salon page is opened. Passing callbacks here
-        // decouples the card from the parent state.
         return _buildSalonPreviewCard(
           context,
           salon,
@@ -465,9 +479,6 @@ class _HomeMapPageState extends State<HomeMapPage> {
 
   /// Opens the detailed salon page for the given [salon].  A map
   /// containing the salon details is passed as arguments to the route.
-  /// Only fields available on [SalonLocation] are included.  If
-  /// additional fields (e.g. description, opening hours) become
-  /// available from the backend they should be added here.
   void _openSalonDetail(SalonLocation salon) {
     final Map<String, dynamic> args = {
       'name': salon.name,
@@ -490,26 +501,28 @@ class _HomeMapPageState extends State<HomeMapPage> {
     if (!AuthService.isLoggedIn()) {
       Navigator.of(context).pushNamed('/login');
     } else {
-      // In a full implementation we might pass the salon id or name to
-      // preselect it in the booking flow.  At present the booking
-      // wizard does not support this, so we simply navigate to the
-      // select salon page.
       Navigator.of(context).pushNamed('/booking/select-salon');
     }
   }
 
+  /// Builds a preview card for a salon.  This widget is used both in
+  /// the list view and as the bottom overlay on the map view.  If
+  /// [inList] is true the card has vertical margins; otherwise it
+  /// appears flush at the bottom of the screen.  [onTapCard] and
+  /// [onTapBook] can be provided to handle taps on the card and
+  /// booking button respectively.
   Widget _buildSalonPreviewCard(
-      BuildContext context,
-      SalonLocation salon, {
-      bool inList = false,
-      VoidCallback? onTapCard,
-      VoidCallback? onTapBook,
-    }) {
+    BuildContext context,
+    SalonLocation salon, {
+    bool inList = false,
+    VoidCallback? onTapCard,
+    VoidCallback? onTapBook,
+  }) {
     final theme = Theme.of(context);
     final brightness = theme.brightness;
     final accent = theme.colorScheme.secondary;
-    // Build a row of euro icons for the price level.  Each character in the
-    // price string corresponds to one euro icon.
+    // Build a row of euro icons for the price level.  Each character in
+    // the price string corresponds to one euro icon.
     final Widget priceRow = Row(
       children: salon.priceLevel
           .split('')
@@ -528,7 +541,9 @@ class _HomeMapPageState extends State<HomeMapPage> {
       } else {
         stars.add(Icon(Icons.star_border,
             size: 16,
-            color: brightness == Brightness.dark ? Colors.white70 : Colors.black38));
+            color: brightness == Brightness.dark
+                ? Colors.white70
+                : Colors.black38));
       }
     }
     return GestureDetector(
@@ -556,8 +571,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Placeholder for salon image. In a real app this would
-                // display the salon's cover image.
+                // Placeholder for salon image.  In a real app this
+                // would display the salon's cover image.
                 Container(
                   width: 64,
                   height: 64,
@@ -567,8 +582,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                         : Colors.black12,
                     borderRadius: BorderRadius.circular(12.0),
                   ),
-                  child:
-                      const Icon(Icons.image, color: Colors.grey, size: 32),
+                  child: const Icon(Icons.image, color: Colors.grey, size: 32),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -589,7 +603,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      // Placeholder subtitle. Could be replaced with
+                      // Placeholder subtitle.  Could be replaced with
                       // salon.subtitle if available.
                       Text(
                         'Subtitle',
@@ -606,7 +620,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
               ],
             ),
             const SizedBox(height: 8),
-            // Placeholder description. Truncate to two lines.
+            // Placeholder description.  Truncate to two lines.
             Text(
               'Beschreibung des Salons. ',
               maxLines: 2,
@@ -626,8 +640,8 @@ class _HomeMapPageState extends State<HomeMapPage> {
                     () {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                            content:
-                                Text('Salon "${salon.name}" ausgewählt (Demo)')),
+                            content: Text(
+                                'Salon "${salon.name}" ausgewählt (Demo)')),
                       );
                     },
                 style: OutlinedButton.styleFrom(
@@ -641,22 +655,23 @@ class _HomeMapPageState extends State<HomeMapPage> {
       ),
     );
   }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final brightness = theme.brightness;
-    final accent = theme.colorScheme.secondary;
+    final ThemeData theme = Theme.of(context);
+    final Brightness brightness = theme.brightness;
+    final Color accent = theme.colorScheme.secondary;
     return Scaffold(
       body: SafeArea(
         child: Stack(
           children: [
             // Map or list view
             Positioned.fill(
-              child: _showList ? _buildListView(theme) : _buildMapView(theme),
+              child: _showList
+                  ? _buildListView(theme)
+                  : _buildMapView(theme),
             ),
-            // Top overlay
+            // Top overlay containing the toggle buttons, search bar and filter
             Positioned(
               top: 0,
               left: 0,
@@ -713,7 +728,9 @@ class _HomeMapPageState extends State<HomeMapPage> {
                                 : Colors.white.withOpacity(0.6),
                             elevation: 0,
                             side: BorderSide(
-                              color: brightness == Brightness.dark ? Colors.white54 : Colors.black54,
+                              color: brightness == Brightness.dark
+                                  ? Colors.white54
+                                  : Colors.black54,
                             ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12.0),
@@ -776,6 +793,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
         onTap: (index) {
           switch (index) {
             case 0:
+              // Navigate back to home.  Remove all routes to avoid stacking.
               Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
               break;
             case 1:
@@ -795,6 +813,7 @@ class _HomeMapPageState extends State<HomeMapPage> {
               if (!AuthService.isLoggedIn()) {
                 Navigator.of(context).pushNamed('/login');
               } else {
+                // Navigate to a placeholder CRM page; supply id as an example.
                 Navigator.of(context).pushNamed('/crm/customer', arguments: {'id': 1});
               }
               break;
