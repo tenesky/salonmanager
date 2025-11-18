@@ -2,6 +2,12 @@
 # builds targeting iOS 13 and above to avoid deprecated APIs and warnings
 # (e.g. UIActivityIndicatorViewStyleWhite and keyWindow). See the
 # build error summary for more details.
+# Explicitly specify the CocoaPods spec source.  The default CDN sometimes
+# returns 500 errors during builds in CI (e.g. codemagic), causing pod
+# install to fail.  Pointing directly to the GitHub specs repo avoids
+# reliance on the CDN and improves reliability.
+source 'https://github.com/CocoaPods/Specs.git'
+
 platform :ios, '13.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
