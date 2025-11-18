@@ -298,7 +298,8 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
           ),
         ],
       ),
-      bottomNavigationBar: _buildBottomNav(context, currentIndex: 2),
+    ),
+    bottomNavigationBar: _buildBottomNav(context, currentIndex: 2),
     );
   }
 

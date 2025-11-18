@@ -335,7 +335,6 @@ class _BookingSelectStylistPageState extends State<BookingSelectStylistPage> {
               },
             ),
           ),
-          ],
           // Continue button within the page body
           Padding(
             padding: const EdgeInsets.all(16.0),

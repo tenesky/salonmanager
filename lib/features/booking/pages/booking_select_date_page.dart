@@ -435,8 +435,9 @@ class _BookingSelectDatePageState extends State<BookingSelectDatePage> {
           ),
         ],
       ),
-      bottomNavigationBar: _buildBottomNav(context, currentIndex: 2),
-    );
+    ),
+    bottomNavigationBar: _buildBottomNav(context, currentIndex: 2),
+  );
   }
 
   /// Builds the persistent bottom navigation bar used throughout the app.
