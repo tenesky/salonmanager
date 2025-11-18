@@ -16,7 +16,15 @@ class ThemedBackground extends StatelessWidget {
     final String imagePath = brightness == Brightness.dark
         ? 'assets/background_dark.png'
         : 'assets/background_light.png';
+    // Expand the container to fill all available space. Without an explicit
+    // constraint, a Container with a decoration sizes itself to its child,
+    // which can result in the background not extending to the bottom of the
+    // screen when the child is shorter than the viewport. By specifying
+    // BoxConstraints.expand(), the container takes up the full dimensions
+    // provided by its parent (typically the Scaffold body), ensuring the
+    // background image covers the entire screen.
     return Container(
+      constraints: const BoxConstraints.expand(),
       decoration: BoxDecoration(
         image: DecorationImage(
           image: AssetImage(imagePath),

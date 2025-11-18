@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 // Import pages for routing. Using relative imports keeps the package simple
 // while it is under local development.
 import 'features/auth/pages/welcome_page.dart';
@@ -146,8 +148,61 @@ import 'features/system/pages/forbidden_page.dart';
 /// [MaterialApp] with placeholder theming and a placeholder home
 /// widget.  Detailed routing, theming and state management will be
 /// added as the project progresses.
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({Key? key}) : super(key: key);
+
+  /// Access the nearest [_MyAppState] up the widget tree. This allows
+  /// pages such as [LanguageSettingsPage] to change the current locale.
+  static _MyAppState? of(BuildContext context) {
+    return context.findAncestorStateOfType<_MyAppState>();
+  }
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  Locale? _locale;
+
+  /// Returns the current locale of the application. This getter is used
+  /// by settings pages to determine the currently active language.
+  Locale? get locale => _locale;
+
+  /// Supported locales in the application. Add further locales to this
+  /// list to enable additional languages.
+  static const supportedLocales = [
+    Locale('en'),
+    Locale('de'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedLocale();
+  }
+
+  /// Loads the previously selected locale from shared preferences. If no
+  /// locale was stored, [_locale] remains null and the system locale
+  /// determines the app language.
+  Future<void> _loadSavedLocale() async {
+    final prefs = await SharedPreferences.getInstance();
+    final code = prefs.getString('languageCode');
+    if (code != null && code.isNotEmpty) {
+      setState(() {
+        _locale = Locale(code);
+      });
+    }
+  }
+
+  /// Updates the application locale and persists the selection.
+  Future<void> setLocale(Locale locale) async {
+    if (!supportedLocales.contains(locale)) return;
+    setState(() {
+      _locale = locale;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('languageCode', locale.languageCode);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -166,6 +221,13 @@ class MyApp extends StatelessWidget {
               // styling across the app.
               theme: lightTheme,
               darkTheme: darkTheme,
+              locale: _locale,
+              supportedLocales: supportedLocales,
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
               // Define the initial route and route table. Use the splash
               // page as the first screen so users see the loading
               // animation before landing on the welcome page. The splash

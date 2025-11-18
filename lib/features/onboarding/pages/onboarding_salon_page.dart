@@ -403,6 +403,9 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
               children: [
                 TextField(
                   controller: _salonNameController,
+                  // Trigger a rebuild when the user edits the salon name so the
+                  // save button can be enabled or disabled accordingly.
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Salonname',
                     border: OutlineInputBorder(),
@@ -494,6 +497,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
               children: [
                 TextField(
                   controller: _streetController,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Straße',
                     border: OutlineInputBorder(),
@@ -502,6 +506,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _houseNumberController,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Hausnummer',
                     border: OutlineInputBorder(),
@@ -510,6 +515,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _postalCodeController,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'PLZ',
                     border: OutlineInputBorder(),
@@ -518,6 +524,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _cityController,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Ort',
                     border: OutlineInputBorder(),
@@ -526,6 +533,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _countryController,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Land',
                     border: OutlineInputBorder(),
@@ -624,6 +632,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                 TextField(
                   controller: _email1Controller,
                   keyboardType: TextInputType.emailAddress,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'E-Mail Adresse 1',
                     border: OutlineInputBorder(),
@@ -633,6 +642,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                 TextField(
                   controller: _email2Controller,
                   keyboardType: TextInputType.emailAddress,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'E-Mail Adresse 2 (optional)',
                     border: OutlineInputBorder(),
@@ -642,6 +652,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                 TextField(
                   controller: _phone1Controller,
                   keyboardType: TextInputType.phone,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Telefonnummer 1',
                     border: OutlineInputBorder(),
@@ -651,6 +662,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                 TextField(
                   controller: _phone2Controller,
                   keyboardType: TextInputType.phone,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Telefonnummer 2 (optional)',
                     border: OutlineInputBorder(),
@@ -786,6 +798,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                           child: TextField(
                             controller: _openingStartControllers[i],
                             keyboardType: TextInputType.datetime,
+                            onChanged: (_) => setState(() {}),
                             decoration: const InputDecoration(
                               labelText: 'Von (HH:MM)',
                               border: OutlineInputBorder(),
@@ -797,6 +810,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
                           child: TextField(
                             controller: _openingEndControllers[i],
                             keyboardType: TextInputType.datetime,
+                            onChanged: (_) => setState(() {}),
                             decoration: const InputDecoration(
                               labelText: 'Bis (HH:MM)',
                               border: OutlineInputBorder(),

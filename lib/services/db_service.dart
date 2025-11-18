@@ -2440,11 +2440,6 @@ class DbService {
       final endUtc = nextDay.toUtc().toIso8601String();
       query = query.lt('start_datetime', endUtc);
     }
-    // Apply search filter on service name
-    if (search != null && search.trim().isNotEmpty) {
-      final q = search.trim();
-      query = query.ilike('services.name', '%$q%');
-    }
     // Order by start_datetime descending
     query = query.order('start_datetime', ascending: false);
     final response = await query.execute();
@@ -2475,6 +2470,21 @@ class DbService {
         'serviceName': service != null ? service['name'] : null,
         'stylistName': stylist != null ? stylist['name'] : null,
       });
+    }
+    // Apply search filter on the client side because PostgREST does not support
+    // case‑insensitive search on nested relationship columns using the
+    // `ilike` operator (e.g. `services.name`). Filtering here avoids errors
+    // like "ilike parameter is not allowed for relationships". If a search
+    // term is provided, retain only those bookings whose service name
+    // contains the query (case‑insensitive).
+    if (search != null && search.trim().isNotEmpty) {
+      final String q = search.trim().toLowerCase();
+      return bookings
+          .where((booking) {
+            final String? serviceName = booking['serviceName'] as String?;
+            return serviceName != null && serviceName.toLowerCase().contains(q);
+          })
+          .toList();
     }
     return bookings;
   }

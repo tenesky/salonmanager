@@ -1,21 +1,46 @@
 import 'package:flutter/material.dart';
 import '../../../services/auth_service.dart';
+import '../../../app.dart';
 
-/// Placeholder page for language settings.  This screen will allow users
-/// to select the app language from available translations.  Currently it
-/// displays a message to indicate that the feature is not yet
-/// implemented.
+/// Page for selecting the application language. This screen lists
+/// available languages (currently English and German) and updates the
+/// app locale when the user taps on a language. The current selection
+/// is highlighted with a check icon. The selected locale is persisted
+/// using shared preferences by [MyApp.setLocale].
 class LanguageSettingsPage extends StatelessWidget {
   const LanguageSettingsPage({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final appState = MyApp.of(context);
+    final currentCode = appState?.locale?.languageCode;
+    final accent = Theme.of(context).colorScheme.secondary;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Language'),
       ),
-      body: const Center(
-        child: Text('Language selection will be available soon.'),
+      body: ListView(
+        children: [
+          ListTile(
+            title: const Text('Deutsch'),
+            trailing: currentCode == 'de'
+                ? Icon(Icons.check, color: accent)
+                : null,
+            onTap: () {
+              appState?.setLocale(const Locale('de'));
+            },
+          ),
+          ListTile(
+            title: const Text('English'),
+            trailing: currentCode == 'en'
+                ? Icon(Icons.check, color: accent)
+                : null,
+            onTap: () {
+              appState?.setLocale(const Locale('en'));
+            },
+          ),
+        ],
       ),
       bottomNavigationBar: _buildBottomNav(context, currentIndex: 4),
     );

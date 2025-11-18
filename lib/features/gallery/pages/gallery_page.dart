@@ -216,13 +216,19 @@ class _GalleryPageState extends State<GalleryPage> {
                                 Positioned(
                                   bottom: 8,
                                   right: 8,
-                                  child: GestureDetector(
-                                    onTap: () => _toggleLike(img['id'] as int),
-                                    child: Icon(
+                                  // Use IconButton instead of GestureDetector to ensure the
+                                  // like button is tappable even when nested inside another
+                                  // GestureDetector. Setting zero padding and minimal
+                                  // constraints prevents the button from expanding its size.
+                                  child: IconButton(
+                                    iconSize: 20,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    icon: Icon(
                                       liked ? Icons.favorite : Icons.favorite_border,
                                       color: liked ? Colors.amber : Colors.grey,
-                                      size: 20,
                                     ),
+                                    onPressed: () => _toggleLike(img['id'] as int),
                                   ),
                                 ),
                               ],

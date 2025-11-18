@@ -214,6 +214,13 @@ class _HomePageState extends State<HomePage> {
       // Remove the traditional app bar; build the page inside SafeArea.
       body: ThemedBackground(
         child: Container(
+          // Ensure the overlay fills at least the full height of the screen. Without
+          // an explicit constraint, the container sizes itself to the height of
+          // its child (the SingleChildScrollView), which can leave unused
+          // space at the bottom of the page without the semi‑transparent overlay.
+          constraints: BoxConstraints(
+            minHeight: MediaQuery.of(context).size.height,
+          ),
           color: brightness == Brightness.dark
               ? Colors.black.withOpacity(0.4)
               : Colors.white.withOpacity(0.4),

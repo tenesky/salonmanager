@@ -198,22 +198,26 @@ class _GalleryProfilePageState extends State<GalleryProfilePage>
                           bottom: 8,
                           right: 8,
                           child: isLikedTab
-                              ? GestureDetector(
-                                  onTap: () => _unlikeImage(img['id'] as int),
-                                  child: Icon(
+                              ? IconButton(
+                                  iconSize: 20,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  icon: const Icon(
                                     Icons.favorite,
                                     color: Colors.amber,
-                                    size: 20,
                                   ),
+                                  onPressed: () => _unlikeImage(img['id'] as int),
                                 )
                               : isMyImages
-                                  ? GestureDetector(
-                                      onTap: () => _deleteImage(img['id'] as int),
-                                      child: const Icon(
+                                  ? IconButton(
+                                      iconSize: 20,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      icon: const Icon(
                                         Icons.delete,
                                         color: Colors.red,
-                                        size: 20,
                                       ),
+                                      onPressed: () => _deleteImage(img['id'] as int),
                                     )
                                   : const SizedBox.shrink(),
                         ),

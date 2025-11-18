@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 import '../../../services/auth_service.dart';
 import '../../../services/db_service.dart';
@@ -22,6 +24,27 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   String _handle = '';
   String? _photoUrl;
   bool _loading = true;
+
+  /// Picks an image from the device's gallery and updates the
+  /// profile photo. The image path is persisted locally via
+  /// SharedPreferences under the key `profile.photoPath` so that the
+  /// selected avatar is retained across app launches. Errors are
+  /// ignored silently.
+  Future<void> _pickProfileImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? picked = await picker.pickImage(source: ImageSource.gallery);
+      if (picked == null) return;
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString('profile.photoPath', picked.path);
+      if (!mounted) return;
+      setState(() {
+        _photoUrl = picked.path;
+      });
+    } catch (_) {
+      // silently ignore any errors during image selection
+    }
+  }
 
   @override
   void initState() {
@@ -79,20 +102,29 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         handle = '';
       }
       if (mounted) {
+        // Attempt to load a locally stored profile photo path from
+        // SharedPreferences. If present, this path will be used as
+        // the avatar. Otherwise, _photoUrl remains null.
+        final SharedPreferences localPrefs = await SharedPreferences.getInstance();
+        final String? localPhotoPath = localPrefs.getString('profile.photoPath');
         setState(() {
           _displayName = name;
           _handle = handle;
-          // Photo URL is currently unused (placeholder)
-          _photoUrl = null;
+          _photoUrl = localPhotoPath;
           _loading = false;
         });
       }
     } catch (_) {
       if (mounted) {
+        // Even on error, attempt to load a locally stored profile photo
+        // from SharedPreferences so that the user still sees their chosen
+        // avatar when database access fails.
+        final SharedPreferences localPrefs = await SharedPreferences.getInstance();
+        final String? localPhotoPath = localPrefs.getString('profile.photoPath');
         setState(() {
           _displayName = 'User';
           _handle = '';
-          _photoUrl = null;
+          _photoUrl = localPhotoPath;
           _loading = false;
         });
       }
@@ -133,38 +165,52 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                 Stack(
                   alignment: Alignment.bottomRight,
                   children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundColor: brightness == Brightness.dark
-                          ? Colors.white24
-                          : Colors.black12,
-                      backgroundImage:
-                          _photoUrl != null ? NetworkImage(_photoUrl!) : null,
-                      child: _photoUrl == null
-                          ? Icon(
-                              Icons.person,
-                              size: 48,
-                              color: brightness == Brightness.dark
-                                  ? Colors.white54
-                                  : Colors.black54,
-                            )
-                          : null,
-                    ),
+                    // Display either a network image or a local file as the avatar.
+                    () {
+                      ImageProvider? provider;
+                      if (_photoUrl != null && _photoUrl!.isNotEmpty) {
+                        if (_photoUrl!.startsWith('http')) {
+                          provider = NetworkImage(_photoUrl!);
+                        } else {
+                          provider = FileImage(File(_photoUrl!));
+                        }
+                      }
+                      return CircleAvatar(
+                        radius: 40,
+                        backgroundColor: brightness == Brightness.dark
+                            ? Colors.white24
+                            : Colors.black12,
+                        backgroundImage: provider,
+                        child: provider == null
+                            ? Icon(
+                                Icons.person,
+                                size: 48,
+                                color: brightness == Brightness.dark
+                                    ? Colors.white54
+                                    : Colors.black54,
+                              )
+                            : null,
+                      );
+                    }(),
                     // Edit icon overlay
                     Positioned(
                       bottom: 0,
                       right: 0,
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.secondary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.edit,
-                          color: Colors.white,
-                          size: 14,
+                      child: InkWell(
+                        onTap: _pickProfileImage,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.secondary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.edit,
+                            color: Colors.white,
+                            size: 14,
+                          ),
                         ),
                       ),
                     ),
@@ -242,8 +288,11 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                           Navigator.of(ctx).pop();
                           await AuthService.logout();
                           if (!mounted) return;
+                          // After logging out, direct the user to the modern login page
+                          // rather than the old welcome page. The '/login' route displays
+                          // the new login screen introduced after the splash page.
                           Navigator.of(context).pushNamedAndRemoveUntil(
-                              '/', (route) => false);
+                              '/login', (route) => false);
                         },
                         child: const Text('Log out'),
                       ),
