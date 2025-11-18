@@ -1208,6 +1208,34 @@ class DbService {
     }
   }
 
+  /// Returns the list of image IDs that the current user has liked.
+  ///
+  /// This method queries the `gallery_likes` table filtering by
+  /// `user_id` and extracts the `image_id` column.  If the user is
+  /// not logged in or if an error occurs, an empty list is returned.
+  static Future<List<int>> getLikedGalleryImageIds() async {
+    final String? userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      return [];
+    }
+    final response = await _client
+        .from('gallery_likes')
+        .select('image_id')
+        .eq('user_id', userId)
+        .execute();
+    if (response.error != null) {
+      // Do not throw here; return an empty list so callers can
+      // continue gracefully even if the query fails.
+      return [];
+    }
+    final List<dynamic> data = response.data as List<dynamic>;
+    return data
+        .map((e) => e['image_id'])
+        .where((id) => id != null)
+        .cast<int>()
+        .toList();
+  }
+
   /// Deletes a gallery image and its associated likes.  Only the
   /// original uploader may delete their image.  Throws if the
   /// deletion fails.

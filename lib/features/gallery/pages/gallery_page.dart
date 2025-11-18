@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../services/db_service.dart';
 import '../../../services/auth_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// A simple public gallery page displaying hair style images in a
 /// responsive grid. Users can filter by hair length, style and
@@ -74,6 +75,11 @@ class _GalleryPageState extends State<GalleryPage> {
   void initState() {
     super.initState();
     _loadImages();
+    // Also load the user's liked images once images are fetched.
+    // We invoke this after a short delay to ensure Supabase is initialised.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadLikedImages();
+    });
   }
 
   /// Loads gallery images from Supabase. If the query fails, the
@@ -90,6 +96,24 @@ class _GalleryPageState extends State<GalleryPage> {
       });
     } catch (_) {
       // In case of an error, keep placeholder images.
+    }
+  }
+
+  /// Loads the list of image IDs liked by the current user from Supabase.
+  /// When the user is not logged in the liked set remains empty.
+  Future<void> _loadLikedImages() async {
+    if (!AuthService.isLoggedIn()) {
+      return;
+    }
+    try {
+      final List<int> ids = await DbService.getLikedGalleryImageIds();
+      setState(() {
+        _likedImageIds
+          ..clear()
+          ..addAll(ids);
+      });
+    } catch (_) {
+      // Ignore errors; keep the current liked set.
     }
   }
 
@@ -477,11 +501,23 @@ class _GalleryPageState extends State<GalleryPage> {
     Navigator.of(context).pushNamed('/gallery/upload');
   }
 
-  void _openProfilePage() {
+  Future<void> _openProfilePage() async {
+    if (!AuthService.isLoggedIn()) {
+      Navigator.of(context).pushNamed('/login');
+      return;
+    }
+    List<Map<String, dynamic>> myImages = [];
+    try {
+      final String? userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        myImages = await DbService.getGalleryImagesByUser(userId);
+      }
+    } catch (_) {
+      // ignore errors; myImages remains empty
+    }
     final List<Map<String, dynamic>> likedImages = _images
         .where((img) => _likedImageIds.contains(img['id'] as int))
         .toList();
-    final List<Map<String, dynamic>> myImages = [];
     Navigator.of(context).pushNamed(
       '/gallery/profile',
       arguments: {
