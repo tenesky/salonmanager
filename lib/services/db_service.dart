@@ -34,6 +34,14 @@ class DbService {
   static const String _galleryUploadEndpoint =
       'https://media.salonmanager.app/upload.php';
 
+  /// The endpoint on the salonmanager media server used for uploading
+  /// profile images (avatars). Files uploaded to this endpoint will be
+  /// stored in the `profilimage` folder on the media server. The server
+  /// returns a JSON object containing the final image URL. See the
+  /// `upload_profile.php` script for details.
+  static const String _profileImageUploadEndpoint =
+      'https://media.salonmanager.app/upload_profile.php';
+
   /// Optional secret key for authenticating uploads to the external
   /// gallery server. If your PHP upload script requires a token or
   /// API key, set it here. If not needed, leave it as an empty
@@ -105,6 +113,68 @@ class DbService {
       }
     } else {
       throw Exception('Unexpected response from upload server: ${response.data}');
+    }
+    final dynamic url = data['url'];
+    if (url == null || url is! String) {
+      throw Exception('Upload server did not return a URL');
+    }
+    return url;
+  }
+
+  /// Uploads a user profile image (avatar) to the external media server and
+  /// returns the public URL. This method is analogous to
+  /// [uploadGalleryImageToServer] but posts to the dedicated profile
+  /// endpoint so that images are stored in the `profilimage` directory.
+  static Future<String> uploadProfileImageToServer(
+      List<int> fileBytes, String fileName) async {
+    // Create a dio client instance for making HTTP requests. Using an alias
+    // prevents a name clash with the http MultipartFile class and allows us
+    // to explicitly reference dio types.
+    final dio.Dio dioClient = dio.Dio();
+    // Prepare multipart form data. Include a secret token if configured.
+    final Map<String, dynamic> fields = {};
+    if (_galleryUploadSecret.isNotEmpty) {
+      fields['secret'] = _galleryUploadSecret;
+    }
+    final dio.FormData formData = dio.FormData.fromMap({
+      ...fields,
+      // Use the fully qualified dio.MultipartFile to avoid ambiguity with
+      // the http package's MultipartFile.
+      'file': dio.MultipartFile.fromBytes(fileBytes, filename: fileName),
+    });
+    dio.Response<dynamic> response;
+    try {
+      response = await dioClient.post(
+        _profileImageUploadEndpoint,
+        data: formData,
+        options: dio.Options(
+          method: 'POST',
+          responseType: dio.ResponseType.json,
+          headers: const {
+            // Accept JSON responses
+            'Accept': 'application/json',
+          },
+        ),
+      );
+    } catch (e) {
+      throw Exception('Failed to upload image: \$e');
+    }
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to upload image (status \${response.statusCode}): \${response.data}');
+    }
+    dynamic data;
+    // The response data may already be a Map when Dio decodes JSON
+    if (response.data is Map<String, dynamic>) {
+      data = response.data;
+    } else if (response.data is String) {
+      try {
+        data = jsonDecode(response.data);
+      } catch (_) {
+        throw Exception('Unexpected response from upload server: \${response.data}');
+      }
+    } else {
+      throw Exception('Unexpected response from upload server: \${response.data}');
     }
     final dynamic url = data['url'];
     if (url == null || url is! String) {

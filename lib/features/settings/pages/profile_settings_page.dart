@@ -25,24 +25,33 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   String? _photoUrl;
   bool _loading = true;
 
-  /// Picks an image from the device's gallery and updates the
-  /// profile photo. The image path is persisted locally via
-  /// SharedPreferences under the key `profile.photoPath` so that the
-  /// selected avatar is retained across app launches. Errors are
-  /// ignored silently.
+  /// Picks an image from the device's gallery and uploads it to the media
+  /// server as the user's avatar. The returned URL is saved locally in
+  /// SharedPreferences under the key `profile.photoUrl` so that the
+  /// selected avatar is retained across app launches.  If the upload
+  /// fails, the error is silently ignored and the image is not updated.
   Future<void> _pickProfileImage() async {
     try {
       final ImagePicker picker = ImagePicker();
       final XFile? picked = await picker.pickImage(source: ImageSource.gallery);
       if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      // Upload the avatar to the media server.  The file name includes the
+      // original extension so that the server can preserve it.
+      final String url = await DbService.uploadProfileImageToServer(
+        bytes.toList(),
+        picked.name,
+      );
+      // Persist the returned URL locally. This ensures the avatar is
+      // remembered across app launches without requiring a database update.
       final SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setString('profile.photoPath', picked.path);
+      await prefs.setString('profile.photoUrl', url);
       if (!mounted) return;
       setState(() {
-        _photoUrl = picked.path;
+        _photoUrl = url;
       });
     } catch (_) {
-      // silently ignore any errors during image selection
+      // silently ignore any errors during image selection or upload
     }
   }
 
@@ -102,29 +111,29 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         handle = '';
       }
       if (mounted) {
-        // Attempt to load a locally stored profile photo path from
-        // SharedPreferences. If present, this path will be used as
+        // Attempt to load a locally stored profile photo URL from
+        // SharedPreferences. If present, this URL will be used as
         // the avatar. Otherwise, _photoUrl remains null.
         final SharedPreferences localPrefs = await SharedPreferences.getInstance();
-        final String? localPhotoPath = localPrefs.getString('profile.photoPath');
+        final String? storedPhotoUrl = localPrefs.getString('profile.photoUrl');
         setState(() {
           _displayName = name;
           _handle = handle;
-          _photoUrl = localPhotoPath;
+          _photoUrl = storedPhotoUrl;
           _loading = false;
         });
       }
     } catch (_) {
       if (mounted) {
         // Even on error, attempt to load a locally stored profile photo
-        // from SharedPreferences so that the user still sees their chosen
+        // URL from SharedPreferences so that the user still sees their chosen
         // avatar when database access fails.
         final SharedPreferences localPrefs = await SharedPreferences.getInstance();
-        final String? localPhotoPath = localPrefs.getString('profile.photoPath');
+        final String? storedPhotoUrl = localPrefs.getString('profile.photoUrl');
         setState(() {
           _displayName = 'User';
           _handle = '';
-          _photoUrl = localPhotoPath;
+          _photoUrl = storedPhotoUrl;
           _loading = false;
         });
       }
