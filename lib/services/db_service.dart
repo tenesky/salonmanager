@@ -5,7 +5,11 @@ import 'package:postgrest/postgrest.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
-import 'package:dio/dio.dart';
+// Import dio with an alias to avoid name conflicts with the http package.  Using
+// an alias allows us to explicitly reference dio classes such as
+// [dio.MultipartFile] without accidentally referring to the similarly named
+// class from the http package.
+import 'package:dio/dio.dart' as dio;
 
 /// A lightweight data service that wraps Supabase operations.  This
 /// service exposes high‑level methods used throughout the app to
@@ -53,26 +57,30 @@ class DbService {
   /// exception is thrown.
   static Future<String> uploadGalleryImageToServer(
       List<int> fileBytes, String fileName) async {
-    // Create a Dio instance for making HTTP requests.
-    final dio = Dio();
+    // Create a dio client instance for making HTTP requests. Using an alias
+    // prevents a name clash with the http MultipartFile class and allows us
+    // to explicitly reference dio types.
+    final dio.Dio dioClient = dio.Dio();
     // Prepare multipart form data. Include a secret token if configured.
     final Map<String, dynamic> fields = {};
     if (_galleryUploadSecret.isNotEmpty) {
       fields['secret'] = _galleryUploadSecret;
     }
-    final formData = FormData.fromMap({
+    final dio.FormData formData = dio.FormData.fromMap({
       ...fields,
-      'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
+      // Use the fully qualified dio.MultipartFile to avoid ambiguity with
+      // the http package's MultipartFile.
+      'file': dio.MultipartFile.fromBytes(fileBytes, filename: fileName),
     });
-    Response<dynamic> response;
+    dio.Response<dynamic> response;
     try {
-      response = await dio.post(
+      response = await dioClient.post(
         _galleryUploadEndpoint,
         data: formData,
-        options: Options(
+        options: dio.Options(
           method: 'POST',
-          responseType: ResponseType.json,
-          headers: {
+          responseType: dio.ResponseType.json,
+          headers: const {
             // Accept JSON responses
             'Accept': 'application/json',
           },

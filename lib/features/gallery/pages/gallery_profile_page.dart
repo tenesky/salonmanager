@@ -63,7 +63,9 @@ class _GalleryProfilePageState extends State<GalleryProfilePage>
     }
   }
 
-  Future<void> _deleteImage(int imageId) async {
+  /// Deletes a gallery image owned by the current user. Accepts a dynamic
+  /// imageId because IDs may be integers (for sample assets) or uuid strings
+  /// for real Supabase entries. The duplicated signature has been removed.
   Future<void> _deleteImage(dynamic imageId) async {
     try {
       await DbService.deleteGalleryImage(imageId);
