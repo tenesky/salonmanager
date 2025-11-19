@@ -64,12 +64,14 @@ class _GalleryUploadPageState extends State<GalleryUploadPage> {
     });
     try {
       final bytes = await _pickedFile!.readAsBytes();
-      // Upload the image to Supabase storage
-      final String storagePath =
-          await DbService.uploadGalleryImage(bytes, _pickedFile!.name);
-      // Insert metadata into gallery_images table
+      // Upload the image to our own media server and get a public URL.
+      final String publicUrl = await DbService.uploadGalleryImageToServer(
+        bytes,
+        _pickedFile!.name,
+      );
+      // Insert metadata into gallery_images table with the returned URL.
       await DbService.addGalleryImage(
-        url: storagePath,
+        url: publicUrl,
         description: _descriptionController.text.trim(),
         length: _selectedLength,
         style: _selectedStyle,

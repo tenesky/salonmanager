@@ -5,6 +5,7 @@ import 'package:postgrest/postgrest.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 /// A lightweight data service that wraps Supabase operations.  This
 /// service exposes high‑level methods used throughout the app to
@@ -18,9 +19,70 @@ class DbService {
   /// under a private folder.  When retrieving images we generate
   /// signed URLs so that only authenticated users can view the files.
   static const String _galleryBucket = 'salonmanager';
+
+  /// The endpoint on the salonmanager media server used for uploading
+  /// gallery images. When configured, images will be sent to this URL
+  /// instead of Supabase storage. The server should accept a
+  /// multipart/form-data POST request with a `file` field and return
+  /// a JSON object containing the final image URL. See the
+  /// `upload.php` file in the project root for a reference
+  /// implementation.
+  static const String _galleryUploadEndpoint =
+      'https://media.salonmanager.app/upload.php';
+
+  /// Optional secret key for authenticating uploads to the external
+  /// gallery server. If your PHP upload script requires a token or
+  /// API key, set it here. If not needed, leave it as an empty
+  /// string.
+  static const String _galleryUploadSecret = '';
   /// Returns the global Supabase client instance.  The client is
   /// initialised in `main.dart` via [Supabase.initialize].
   static final SupabaseClient _client = Supabase.instance.client;
+
+  // ---------------------------------------------------------------------------
+  // Gallery image upload to external media server
+  // ---------------------------------------------------------------------------
+
+  /// Uploads a gallery image to the external media server and returns
+  /// the final public URL. This helper constructs a
+  /// `MultipartRequest`, attaches the raw file bytes along with the
+  /// original filename and an optional secret key, and sends it to
+  /// the `_galleryUploadEndpoint`. The server is expected to respond
+  /// with a JSON body containing a `url` field. If the request
+  /// fails or the server returns an unexpected response, an
+  /// exception is thrown.
+  static Future<String> uploadGalleryImageToServer(
+      List<int> fileBytes, String fileName) async {
+    final uri = Uri.parse(_galleryUploadEndpoint);
+    final request = http.MultipartRequest('POST', uri);
+    // Add secret token if defined
+    if (_galleryUploadSecret.isNotEmpty) {
+      request.fields['secret'] = _galleryUploadSecret;
+    }
+    // Attach the image file
+    final file = http.MultipartFile.fromBytes('file', fileBytes,
+        filename: fileName);
+    request.files.add(file);
+    final streamedResponse = await request.send();
+    // Convert the streamed response into a regular HTTP response so we can
+    // read the body safely exactly once.
+    final http.Response response = await http.Response.fromStream(streamedResponse);
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to upload image (status ${response.statusCode}): ${response.body}');
+    }
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (e) {
+      throw Exception('Unexpected response from upload server: ${response.body}');
+    }
+    final dynamic url = data['url'];
+    if (url == null || url is! String) {
+      throw Exception('Upload server did not return a URL');
+    }
+    return url;
+  }
 
   /// Retrieves all stylists from the database.  Stylists are ordered
   /// by their `id`.  Each returned map contains the fields
@@ -1108,8 +1170,15 @@ class DbService {
     for (final row in images) {
       final String? path = row['url'] as String?;
       if (path != null && path.isNotEmpty) {
-        final String signedUrl = await _client.storage.from(_galleryBucket).createSignedUrl(path, 60 * 60 * 24 * 7);
-        row['url'] = signedUrl;
+        // If the stored URL is an internal storage path (does not start
+        // with http), generate a signed URL; otherwise leave the URL
+        // unchanged as it is already publicly accessible.
+        if (!path.startsWith('http')) {
+          final String signedUrl = await _client.storage
+              .from(_galleryBucket)
+              .createSignedUrl(path, 60 * 60 * 24 * 7);
+          row['url'] = signedUrl;
+        }
       }
     }
     return images;
@@ -1133,8 +1202,12 @@ class DbService {
     for (final row in images) {
       final String? path = row['url'] as String?;
       if (path != null && path.isNotEmpty) {
-        final String signedUrl = await _client.storage.from(_galleryBucket).createSignedUrl(path, 60 * 60 * 24 * 7);
-        row['url'] = signedUrl;
+        if (!path.startsWith('http')) {
+          final String signedUrl = await _client.storage
+              .from(_galleryBucket)
+              .createSignedUrl(path, 60 * 60 * 24 * 7);
+          row['url'] = signedUrl;
+        }
       }
     }
     return images;
