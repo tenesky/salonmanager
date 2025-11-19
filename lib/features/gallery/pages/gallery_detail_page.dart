@@ -15,7 +15,7 @@ class GalleryDetailPage extends StatefulWidget {
 
 class _GalleryDetailPageState extends State<GalleryDetailPage> {
   late final Map<String, dynamic> _imageData;
-  late int _imageId;
+  late dynamic _imageId;
   late bool _isLiked;
 
   @override
@@ -24,7 +24,7 @@ class _GalleryDetailPageState extends State<GalleryDetailPage> {
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Map<String, dynamic>) {
       _imageData = args;
-      _imageId = args['id'] as int;
+      _imageId = args['id'];
       _isLiked = args['liked'] as bool? ?? false;
     }
   }

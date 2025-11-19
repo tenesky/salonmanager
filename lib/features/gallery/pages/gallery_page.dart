@@ -68,8 +68,9 @@ class _GalleryPageState extends State<GalleryPage> {
   // Controller for search input.
   final TextEditingController _searchController = TextEditingController();
 
-  // Track liked image ids.
-  final Set<int> _likedImageIds = {};
+  // Track liked image ids. Dynamic allows both int (placeholder) and
+  // String/uuid values returned from Supabase.
+  final Set<dynamic> _likedImageIds = {};
 
   @override
   void initState() {
@@ -106,7 +107,7 @@ class _GalleryPageState extends State<GalleryPage> {
       return;
     }
     try {
-      final List<int> ids = await DbService.getLikedGalleryImageIds();
+      final List<dynamic> ids = await DbService.getLikedGalleryImageIds();
       setState(() {
         _likedImageIds
           ..clear()
@@ -206,7 +207,8 @@ class _GalleryPageState extends State<GalleryPage> {
                       itemCount: _filteredImages.length,
                       itemBuilder: (context, index) {
                         final img = _filteredImages[index];
-                        final bool liked = _likedImageIds.contains(img['id'] as int);
+                        final dynamic imageId = img['id'];
+                        final bool liked = _likedImageIds.contains(imageId);
                         return GestureDetector(
                           onTap: () {
                             // Pass the liked status along with the image data
@@ -252,7 +254,7 @@ class _GalleryPageState extends State<GalleryPage> {
                                       liked ? Icons.favorite : Icons.favorite_border,
                                       color: liked ? Colors.amber : Colors.grey,
                                     ),
-                                    onPressed: () => _toggleLike(img['id'] as int),
+                                    onPressed: () => _toggleLike(imageId),
                                   ),
                                 ),
                               ],
@@ -339,7 +341,7 @@ class _GalleryPageState extends State<GalleryPage> {
     );
   }
 
-  Future<void> _toggleLike(int imageId) async {
+  Future<void> _toggleLike(dynamic imageId) async {
     final bool isLiked = _likedImageIds.contains(imageId);
     if (!AuthService.isLoggedIn()) {
       Navigator.of(context).pushNamed('/login');
@@ -516,7 +518,7 @@ class _GalleryPageState extends State<GalleryPage> {
       // ignore errors; myImages remains empty
     }
     final List<Map<String, dynamic>> likedImages = _images
-        .where((img) => _likedImageIds.contains(img['id'] as int))
+        .where((img) => _likedImageIds.contains(img['id']))
         .toList();
     Navigator.of(context).pushNamed(
       '/gallery/profile',

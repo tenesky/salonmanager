@@ -50,7 +50,7 @@ class _GalleryProfilePageState extends State<GalleryProfilePage>
     super.dispose();
   }
 
-  Future<void> _unlikeImage(int imageId) async {
+  Future<void> _unlikeImage(dynamic imageId) async {
     try {
       await DbService.unlikeGalleryImage(imageId);
       setState(() {
@@ -64,6 +64,7 @@ class _GalleryProfilePageState extends State<GalleryProfilePage>
   }
 
   Future<void> _deleteImage(int imageId) async {
+  Future<void> _deleteImage(dynamic imageId) async {
     try {
       await DbService.deleteGalleryImage(imageId);
       setState(() {
@@ -206,7 +207,7 @@ class _GalleryProfilePageState extends State<GalleryProfilePage>
                                     Icons.favorite,
                                     color: Colors.amber,
                                   ),
-                                  onPressed: () => _unlikeImage(img['id'] as int),
+                                  onPressed: () => _unlikeImage(img['id']),
                                 )
                               : isMyImages
                                   ? IconButton(
@@ -217,7 +218,7 @@ class _GalleryProfilePageState extends State<GalleryProfilePage>
                                         Icons.delete,
                                         color: Colors.red,
                                       ),
-                                      onPressed: () => _deleteImage(img['id'] as int),
+                                      onPressed: () => _deleteImage(img['id']),
                                     )
                                   : const SizedBox.shrink(),
                         ),

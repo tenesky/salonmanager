@@ -5,7 +5,7 @@ import 'package:postgrest/postgrest.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
 /// A lightweight data service that wraps Supabase operations.  This
 /// service exposes high‑level methods used throughout the app to
@@ -53,29 +53,50 @@ class DbService {
   /// exception is thrown.
   static Future<String> uploadGalleryImageToServer(
       List<int> fileBytes, String fileName) async {
-    final uri = Uri.parse(_galleryUploadEndpoint);
-    final request = http.MultipartRequest('POST', uri);
-    // Add secret token if defined
+    // Create a Dio instance for making HTTP requests.
+    final dio = Dio();
+    // Prepare multipart form data. Include a secret token if configured.
+    final Map<String, dynamic> fields = {};
     if (_galleryUploadSecret.isNotEmpty) {
-      request.fields['secret'] = _galleryUploadSecret;
+      fields['secret'] = _galleryUploadSecret;
     }
-    // Attach the image file
-    final file = http.MultipartFile.fromBytes('file', fileBytes,
-        filename: fileName);
-    request.files.add(file);
-    final streamedResponse = await request.send();
-    // Convert the streamed response into a regular HTTP response so we can
-    // read the body safely exactly once.
-    final http.Response response = await http.Response.fromStream(streamedResponse);
+    final formData = FormData.fromMap({
+      ...fields,
+      'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
+    });
+    Response<dynamic> response;
+    try {
+      response = await dio.post(
+        _galleryUploadEndpoint,
+        data: formData,
+        options: Options(
+          method: 'POST',
+          responseType: ResponseType.json,
+          headers: {
+            // Accept JSON responses
+            'Accept': 'application/json',
+          },
+        ),
+      );
+    } catch (e) {
+      throw Exception('Failed to upload image: $e');
+    }
     if (response.statusCode != 200) {
       throw Exception(
-          'Failed to upload image (status ${response.statusCode}): ${response.body}');
+          'Failed to upload image (status ${response.statusCode}): ${response.data}');
     }
-    Map<String, dynamic> data;
-    try {
-      data = jsonDecode(response.body) as Map<String, dynamic>;
-    } catch (e) {
-      throw Exception('Unexpected response from upload server: ${response.body}');
+    dynamic data;
+    // The response data may already be a Map when Dio decodes JSON
+    if (response.data is Map<String, dynamic>) {
+      data = response.data;
+    } else if (response.data is String) {
+      try {
+        data = jsonDecode(response.data);
+      } catch (_) {
+        throw Exception('Unexpected response from upload server: ${response.data}');
+      }
+    } else {
+      throw Exception('Unexpected response from upload server: ${response.data}');
     }
     final dynamic url = data['url'];
     if (url == null || url is! String) {
@@ -1216,7 +1237,7 @@ class DbService {
   /// Likes a gallery image on behalf of the current user.  Inserts a
   /// record into the `gallery_likes` table.  Requires the user to
   /// be authenticated; otherwise the call throws an exception.
-  static Future<void> likeGalleryImage(int imageId) async {
+  static Future<void> likeGalleryImage(dynamic imageId) async {
     final String? userId = _client.auth.currentUser?.id;
     if (userId == null) {
       throw Exception('User not logged in');
@@ -1265,7 +1286,7 @@ class DbService {
   /// Removes a like from a gallery image for the current user.  Deletes
   /// the corresponding row in `gallery_likes`.  Does nothing if the
   /// like does not exist.
-  static Future<void> unlikeGalleryImage(int imageId) async {
+  static Future<void> unlikeGalleryImage(dynamic imageId) async {
     final String? userId = _client.auth.currentUser?.id;
     if (userId == null) {
       throw Exception('User not logged in');
@@ -1286,7 +1307,7 @@ class DbService {
   /// This method queries the `gallery_likes` table filtering by
   /// `user_id` and extracts the `image_id` column.  If the user is
   /// not logged in or if an error occurs, an empty list is returned.
-  static Future<List<int>> getLikedGalleryImageIds() async {
+  static Future<List<dynamic>> getLikedGalleryImageIds() async {
     final String? userId = _client.auth.currentUser?.id;
     if (userId == null) {
       return [];
@@ -1305,14 +1326,13 @@ class DbService {
     return data
         .map((e) => e['image_id'])
         .where((id) => id != null)
-        .cast<int>()
         .toList();
   }
 
   /// Deletes a gallery image and its associated likes.  Only the
   /// original uploader may delete their image.  Throws if the
   /// deletion fails.
-  static Future<void> deleteGalleryImage(int imageId) async {
+  static Future<void> deleteGalleryImage(dynamic imageId) async {
     final String? userId = _client.auth.currentUser?.id;
     if (userId == null) {
       throw Exception('User not logged in');
