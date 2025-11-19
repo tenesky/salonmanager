@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/salon.dart';
+import '../../../services/db_service.dart';
 
 /// Page displaying a list of salons with search and filter options.
 ///
@@ -15,43 +16,13 @@ class SalonListPage extends StatefulWidget {
 }
 
 class _SalonListPageState extends State<SalonListPage> {
-  // Sample salon data. In a real implementation this would come
-  // from Supabase or another backend.
-  final List<Map<String, dynamic>> _allSalons = [
-    {
-      'name': 'Salon Elegance',
-      'distance': '1,2 km',
-      'rating': 4.8,
-      'priceLevel': '\$\$',
-    },
-    {
-      'name': 'Hair Couture',
-      'distance': '2,5 km',
-      'rating': 4.6,
-      'priceLevel': '\$\$\$',
-    },
-    {
-      'name': 'Golden Scissors',
-      'distance': '3,0 km',
-      'rating': 4.7,
-      'priceLevel': '\$\$',
-    },
-    {
-      'name': 'Style Studio',
-      'distance': '4,1 km',
-      'rating': 4.5,
-      'priceLevel': '\$\$\$\$',
-    },
-    {
-      'name': 'Beauty Bar',
-      'distance': '5,0 km',
-      'rating': 4.4,
-      'priceLevel': '\$',
-    },
-  ];
-
-  // Current list after filtering/searching.
-  late List<Map<String, dynamic>> _filteredSalons;
+  // All salons retrieved from Supabase. Starts empty until data is loaded.
+  List<Map<String, dynamic>> _allSalons = [];
+  // Current list after applying search and filter criteria.
+  List<Map<String, dynamic>> _filteredSalons = [];
+  // Loading indicator and error state.
+  bool _isLoading = true;
+  String? _error;
 
   final TextEditingController _searchController = TextEditingController();
   String _selectedRatingFilter = 'Alle';
@@ -60,7 +31,8 @@ class _SalonListPageState extends State<SalonListPage> {
   @override
   void initState() {
     super.initState();
-    _filteredSalons = List<Map<String, dynamic>>.from(_allSalons);
+    // Load salons initially with default filters.
+    _loadSalons();
   }
 
   @override
@@ -69,46 +41,53 @@ class _SalonListPageState extends State<SalonListPage> {
     super.dispose();
   }
 
-  /// Apply search and filter criteria to the list of salons.
-  void _applyFilters() {
-    final query = _searchController.text.toLowerCase().trim();
+  /// Loads salons from Supabase according to the current search and
+  /// filter state. This method sets loading and error flags and
+  /// updates the local lists accordingly.
+  Future<void> _loadSalons() async {
     setState(() {
-      _filteredSalons = _allSalons.where((salon) {
-        final name = (salon['name'] as String).toLowerCase();
-        final matchesQuery = query.isEmpty || name.contains(query);
-        final rating = salon['rating'] as double;
-        final price = salon['priceLevel'] as String;
-        bool matchesRating;
-        switch (_selectedRatingFilter) {
-          case '4.5+':
-            matchesRating = rating >= 4.5;
-            break;
-          case '4.7+':
-            matchesRating = rating >= 4.7;
-            break;
-          default:
-            matchesRating = true;
-        }
-        bool matchesPrice;
-        switch (_selectedPriceFilter) {
-          case '\$':
-            matchesPrice = price == '\$';
-            break;
-          case '\$\$':
-            matchesPrice = price == '\$\$';
-            break;
-          case '\$\$\$':
-            matchesPrice = price == '\$\$\$';
-            break;
-          case '\$\$\$\$':
-            matchesPrice = price == '\$\$\$\$';
-            break;
-          default:
-            matchesPrice = true;
-        }
-        return matchesQuery && matchesRating && matchesPrice;
-      }).toList();
+      _isLoading = true;
+      _error = null;
     });
+    try {
+      final query = _searchController.text.trim();
+      // Determine price filter. Supabase stores price levels in the
+      // `price_level` column (e.g. '$', '$$', '$$$', '$$$$'). A value
+      // of 'Alle' means no filtering.
+      Set<String>? selectedPrices;
+      if (_selectedPriceFilter != 'Alle') {
+        selectedPrices = {_selectedPriceFilter};
+      }
+      // Determine minimum rating based on the selected option.
+      double? minRating;
+      if (_selectedRatingFilter == '4.5+') {
+        minRating = 4.5;
+      } else if (_selectedRatingFilter == '4.7+') {
+        minRating = 4.7;
+      }
+      final salons = await DbService.getSalons(
+        searchQuery: query.isEmpty ? null : query,
+        selectedPrices: selectedPrices,
+        minRating: minRating,
+      );
+      setState(() {
+        _allSalons = salons;
+        _filteredSalons = salons;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Fehler beim Laden der Salons';
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// Triggers loading salons with the current filters. This is called
+  /// whenever the search query or filter values change.
+  void _applyFilters() {
+    // Debounce or directly trigger a reload with updated filters.
+    _loadSalons();
   }
 
   @override
@@ -192,55 +171,67 @@ class _SalonListPageState extends State<SalonListPage> {
             ),
           ),
           Expanded(
-            child: _filteredSalons.isEmpty
-                ? const Center(child: Text('Keine Salons gefunden'))
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    itemCount: _filteredSalons.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final salon = _filteredSalons[index];
-                      return Card(
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: theme.colorScheme.primary,
-                            child: const Icon(Icons.store, color: Colors.white),
-                          ),
-                          title: Text(salon['name'] as String),
-                          subtitle: Row(
-                            children: [
-                              Icon(Icons.star, size: 16, color: Colors.amber.shade600),
-                              const SizedBox(width: 4),
-                              Text((salon['rating'] as double).toString()),
-                              const SizedBox(width: 8),
-                              const Icon(Icons.location_on, size: 16),
-                              const SizedBox(width: 4),
-                              Text(salon['distance'] as String),
-                              const SizedBox(width: 8),
-                              const Icon(Icons.attach_money, size: 16),
-                              const SizedBox(width: 2),
-                              Text(salon['priceLevel'] as String),
-                            ],
-                          ),
-                          onTap: () {
-                            final detailSalon = Salon(
-                              name: salon['name'] as String,
-                              coverImage: 'assets/background_dark.png',
-                              logoImage: 'assets/logo_full.png',
-                              address: 'Musterstraße 1, 12345 Musterstadt',
-                              openingHours: 'Mo–Sa 09:00–18:00',
-                              phone: '+49 123 4567890',
-                            );
-                            Navigator.pushNamed(
-                              context,
-                              '/salon-detail',
-                              arguments: detailSalon,
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : (_error != null
+                    ? Center(child: Text(_error!))
+                    : (_filteredSalons.isEmpty
+                        ? const Center(child: Text('Keine Salons gefunden'))
+                        : ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                            itemCount: _filteredSalons.length,
+                            separatorBuilder: (context, index) => const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final salon = _filteredSalons[index];
+                              // Extract fields with fallbacks
+                              final dynamic ratingVal = salon['rating'];
+                              final double rating = ratingVal is int
+                                  ? ratingVal.toDouble()
+                                  : (ratingVal is double ? ratingVal : 0.0);
+                              final String name = (salon['name'] ?? '').toString();
+                              final String priceLevel = (salon['price_level'] ?? '').toString();
+                              final String address = (salon['address'] ?? '').toString();
+                              final String phone = (salon['phone'] ?? '').toString();
+                              final String opening = (salon['opening_hours'] ?? '').toString();
+                              return Card(
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: theme.colorScheme.primary,
+                                    child: const Icon(Icons.store, color: Colors.white),
+                                  ),
+                                  title: Text(name.isNotEmpty ? name : 'Unbenannter Salon'),
+                                  subtitle: Row(
+                                    children: [
+                                      Icon(Icons.star, size: 16, color: Colors.amber.shade600),
+                                      const SizedBox(width: 4),
+                                      Text(rating.toStringAsFixed(1)),
+                                      const SizedBox(width: 8),
+                                      const Icon(Icons.attach_money, size: 16),
+                                      const SizedBox(width: 2),
+                                      Text(priceLevel.isNotEmpty ? priceLevel : 'n/a'),
+                                    ],
+                                  ),
+                                  onTap: () {
+                                    // Use placeholder images for cover and logo. In a real app
+                                    // these could be loaded from Supabase Storage.
+                                    final detailSalon = Salon(
+                                      name: name,
+                                      coverImage: 'assets/background_dark.png',
+                                      logoImage: 'assets/logo_full.png',
+                                      address: address,
+                                      openingHours: opening.replaceAll('\n', ' | '),
+                                      phone: phone,
+                                    );
+                                    Navigator.pushNamed(
+                                      context,
+                                      '/salon-detail',
+                                      arguments: detailSalon,
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                          ))),
           ),
         ],
       ),

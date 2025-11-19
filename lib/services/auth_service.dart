@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// A service that wraps Supabase authentication flows. Provides helper
 /// methods to sign up, sign in, send and verify one‑time passwords (OTP),
@@ -83,6 +84,15 @@ class AuthService {
   /// exception if the sign‑out fails.
   static Future<void> logout() async {
     await _client.auth.signOut();
+    // Clear locally cached user data such as the profile name. Without
+    // clearing the first name the app may display the previous user's
+    // name after a subsequent login.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('profile.firstName');
+    } catch (_) {
+      // Ignore any SharedPreferences errors silently.
+    }
   }
 
   /// Sends a password reset email to the given address. Supabase will send

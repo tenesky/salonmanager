@@ -254,11 +254,14 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
   /// non‑empty. Returns true if valid. You may adjust the validation
   /// rules here (e.g. make the country optional or required).
   bool _validateAddress() {
+    // Require basic address fields but make country optional. This
+    // prevents the address step from blocking progress when the
+    // country field is left blank. Adjust the conditions here to
+    // change which fields are mandatory.
     return _streetController.text.trim().isNotEmpty &&
         _houseNumberController.text.trim().isNotEmpty &&
         _postalCodeController.text.trim().isNotEmpty &&
-        _cityController.text.trim().isNotEmpty &&
-        _countryController.text.trim().isNotEmpty;
+        _cityController.text.trim().isNotEmpty;
   }
 
   /// Completes the address step if valid. Shows an error if any
@@ -270,7 +273,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bitte alle Adressfelder ausfüllen.')),
+        const SnackBar(content: Text('Bitte Straße, Hausnummer, PLZ und Ort ausfüllen.')),
       );
     }
   }
@@ -280,17 +283,29 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
   /// email addresses; phone numbers may include digits, spaces,
   /// dashes or a leading plus. Returns true if valid.
   bool _validateContact() {
+    // Relax validation: allow at least one contact method (either a valid
+    // email or phone). Emails are validated with a simple pattern and
+    // phone numbers may include digits, spaces, dashes or a leading plus.
     final emailRegex = RegExp(r'^([^@\s]+)@([^@\s]+)\.[^@\s]+$');
-    bool validEmail1 = _email1Controller.text.trim().isNotEmpty &&
-        emailRegex.hasMatch(_email1Controller.text.trim());
-    bool validEmail2 = _email2Controller.text.trim().isNotEmpty &&
-        emailRegex.hasMatch(_email2Controller.text.trim());
-    final phoneRegex = RegExp(r'^\+?[0-9\s\-]{5,}\$');
-    bool validPhone1 = _phone1Controller.text.trim().isNotEmpty &&
-        phoneRegex.hasMatch(_phone1Controller.text.trim());
-    bool validPhone2 = _phone2Controller.text.trim().isNotEmpty &&
-        phoneRegex.hasMatch(_phone2Controller.text.trim());
-    return (validEmail1 || validEmail2) && (validPhone1 || validPhone2);
+    bool hasValidEmail = false;
+    for (final ctrl in [_email1Controller, _email2Controller]) {
+      final text = ctrl.text.trim();
+      if (text.isNotEmpty && emailRegex.hasMatch(text)) {
+        hasValidEmail = true;
+        break;
+      }
+    }
+    final phoneRegex = RegExp(r'^\+?[0-9\s\-]{5,}$');
+    bool hasValidPhone = false;
+    for (final ctrl in [_phone1Controller, _phone2Controller]) {
+      final text = ctrl.text.trim();
+      if (text.isNotEmpty && phoneRegex.hasMatch(text)) {
+        hasValidPhone = true;
+        break;
+      }
+    }
+    // Proceed if at least one valid email or phone number is present.
+    return hasValidEmail || hasValidPhone;
   }
 
   /// Completes the contact step if valid. Shows an error if the
@@ -303,7 +318,7 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Bitte mindestens eine gültige E‑Mail und eine Telefonnummer angeben.')),
+            content: Text('Bitte mindestens eine gültige E‑Mail oder Telefonnummer angeben.')),
       );
     }
   }
@@ -313,14 +328,9 @@ class _OnboardingSalonPageState extends State<OnboardingSalonPage> {
   /// and end times are provided. Returns true if all entries meet
   /// these conditions.
   bool _validateOpeningHours() {
-    for (int i = 0; i < _days.length; i++) {
-      if (!_openingIsClosed[i]) {
-        if (_openingStartControllers[i].text.trim().isEmpty ||
-            _openingEndControllers[i].text.trim().isEmpty) {
-          return false;
-        }
-      }
-    }
+    // Allow incomplete opening hours by treating any missing start or end
+    // time as a closed day. Returning true here prevents this step
+    // from blocking onboarding when times are not provided for every day.
     return true;
   }
 

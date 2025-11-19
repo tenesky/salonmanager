@@ -103,21 +103,22 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadFirstName() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      // Attempt to load the first name from local storage first.
-      String? name = prefs.getString('profile.firstName');
-      // If not available locally, try to fetch from Supabase
-      if (name == null || name.isEmpty) {
-        try {
-          final Map<String, dynamic>? remotePrefs = await DbService.getUserPreferences();
-          final dynamic remoteName = remotePrefs?['first_name'];
-          if (remoteName is String && remoteName.isNotEmpty) {
-            name = remoteName;
-            // Persist locally for future app launches
-            await prefs.setString('profile.firstName', name);
-          }
-        } catch (_) {
-          // ignore errors silently
+      String? name;
+      try {
+        // Always attempt to fetch the latest first name from Supabase. This
+        // ensures that when a user logs in with a different account the
+        // greeting will reflect the current profile rather than a
+        // previously cached value.
+        final Map<String, dynamic>? remotePrefs = await DbService.getUserPreferences();
+        final dynamic remoteName = remotePrefs?['first_name'];
+        if (remoteName is String && remoteName.isNotEmpty) {
+          name = remoteName;
+          // Persist the current name locally for offline scenarios.
+          await prefs.setString('profile.firstName', name);
         }
+      } catch (_) {
+        // If remote fetch fails, fall back to the cached value.
+        name = prefs.getString('profile.firstName');
       }
       if (mounted) {
         setState(() {

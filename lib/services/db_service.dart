@@ -1830,8 +1830,12 @@ class DbService {
     double? minRating,
     bool onlyFree = false,
   }) async {
+    // Select additional fields (address, phone and opening_hours) so
+    // that salon list pages can display full information. Including
+    // these fields does not impact queries that rely solely on the
+    // existing subset.
     dynamic query = _client.from('salons').select(
-        'id, name, rating, price_level, next_slot, has_free, latitude, longitude');
+        'id, name, rating, price_level, next_slot, has_free, latitude, longitude, address, phone, opening_hours');
     // Apply filters
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       final sanitized = searchQuery.trim();
