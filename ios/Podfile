@@ -1,14 +1,5 @@
-# Define a minimum platform version for your iOS app. Flutter
-# builds targeting iOS 13 and above to avoid deprecated APIs and warnings
-# (e.g. UIActivityIndicatorViewStyleWhite and keyWindow). See the
-# build error summary for more details.
-# Explicitly specify the CocoaPods spec source.  The default CDN sometimes
-# returns 500 errors during builds in CI (e.g. codemagic), causing pod
-# install to fail.  Pointing directly to the GitHub specs repo avoids
-# reliance on the CDN and improves reliability.
-source 'https://github.com/CocoaPods/Specs.git'
-
-platform :ios, '13.0'
+# Uncomment this line to define a global platform for your project
+# platform :ios, '12.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -38,11 +29,9 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
+  use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-  target 'RunnerTests' do
-    inherit! :search_paths
-  end
 end
 
 post_install do |installer|
